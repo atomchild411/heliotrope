@@ -1,0 +1,504 @@
+From 4ce5bd170d441124f9e105153ef425f90bac373c Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 08:10:33 -0800
+Subject: [PATCH 1/3] IRIX: WTF/JSC/WebCore/WebKit port (spike)
+
+OS(IRIX); stack bounds, RSS and RAM size from /proc and sysmp; no mincore,
+RealTimeThreads or STACK_BOUNDS_FOR_NEW_THREAD; HZ undef; IPC over
+SOCK_DGRAM (no AF_UNIX SEQPACKET); shared memory files under /tmp
+(shm_open names are paths); IPC glib coders renamed for case-insensitive
+build hosts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/JavaScriptCore/heap/BlockDirectory.cpp |  5 +-
+ .../runtime/JSCBytecodeCacheVersion.cpp       |  4 +-
+ Source/WTF/wtf/MemoryPressureHandler.cpp      |  2 +-
+ Source/WTF/wtf/MemoryPressureHandler.h        |  4 +-
+ Source/WTF/wtf/PlatformHave.h                 |  2 +-
+ Source/WTF/wtf/PlatformOS.h                   |  6 ++
+ Source/WTF/wtf/PlatformWPE.cmake              |  5 ++
+ Source/WTF/wtf/ProcessMemoryStatus.h          |  4 +-
+ Source/WTF/wtf/RAMSize.cpp                    |  9 +++
+ Source/WTF/wtf/RawHex.h                       |  2 +-
+ Source/WTF/wtf/StackBounds.cpp                | 67 +++++++++++++++++++
+ .../wtf/linux/CurrentProcessMemoryStatus.cpp  | 28 ++++++++
+ Source/WTF/wtf/posix/CPUTimePOSIX.cpp         |  5 ++
+ .../wtf/unix/MemoryPressureHandlerUnix.cpp    |  4 +-
+ .../bindings/js/JSHTMLMediaElementCustom.cpp  |  5 ++
+ .../css/calc/CSSCalcTree+NumericIdentity.h    |  5 ++
+ Source/WebCore/loader/DocumentLoader.cpp      |  1 +
+ .../platform/unix/SharedMemoryUnix.cpp        |  7 +-
+ Source/WebKit/Platform/IPC/ArgumentCoders.h   |  4 +-
+ ...ntCodersGlib.h => IPCArgumentCodersGlib.h} |  0
+ .../Platform/IPC/unix/IPCUtilitiesUnix.cpp    |  8 +++
+ 21 files changed, 163 insertions(+), 14 deletions(-)
+ rename Source/WebKit/Platform/IPC/glib/{ArgumentCodersGlib.h => IPCArgumentCodersGlib.h} (100%)
+
+diff --git a/Source/JavaScriptCore/heap/BlockDirectory.cpp b/Source/JavaScriptCore/heap/BlockDirectory.cpp
+index fd02685c..f67c1b5e 100644
+--- a/Source/JavaScriptCore/heap/BlockDirectory.cpp
++++ b/Source/JavaScriptCore/heap/BlockDirectory.cpp
+@@ -68,8 +68,9 @@ void BlockDirectory::updatePercentageOfPagedOutPages(SimpleStats& stats)
+ {
+     // FIXME: We should figure out a solution for Windows and PlayStation.
+     // QNX doesn't have mincore(), though the information can be had. But since all mapped
+-    // pages are resident, does it matter?
+-#if OS(UNIX) && !PLATFORM(PLAYSTATION) && !OS(QNX) && !OS(HAIKU)
++    // pages are resident, does it matter? IRIX declares mincore() but no
++    // library of its has it.
++#if OS(UNIX) && !PLATFORM(PLAYSTATION) && !OS(QNX) && !OS(HAIKU) && !OS(IRIX)
+     size_t pageSize = WTF::pageSize();
+     ASSERT(!(MarkedBlock::blockSize % pageSize));
+     auto numberOfPagesInMarkedBlock = MarkedBlock::blockSize / pageSize;
+diff --git a/Source/JavaScriptCore/runtime/JSCBytecodeCacheVersion.cpp b/Source/JavaScriptCore/runtime/JSCBytecodeCacheVersion.cpp
+index 26e825ac..bbfed213 100644
+--- a/Source/JavaScriptCore/runtime/JSCBytecodeCacheVersion.cpp
++++ b/Source/JavaScriptCore/runtime/JSCBytecodeCacheVersion.cpp
+@@ -39,6 +39,8 @@
+ #include <wtf/spi/darwin/dyldSPI.h>
+ #elif OS(QNX)
+ #include <sys/link.h>
++#elif OS(IRIX)
++// No dladdr or dl_iterate_phdr: the precomputed version below.
+ #else
+ #include <link.h>
+ #endif
+@@ -68,7 +70,7 @@ uint32_t computeJSCBytecodeCacheVersion()
+         }
+         cacheVersion.construct(0);
+         dataLogLnIf(JSCBytecodeCacheVersionInternal::verbose, "Failed to get UUID for JavaScriptCore framework");
+-#elif OS(UNIX) && !PLATFORM(PLAYSTATION) && !OS(HAIKU) && !OS(QNX)
++#elif OS(UNIX) && !PLATFORM(PLAYSTATION) && !OS(HAIKU) && !OS(QNX) && !OS(IRIX)
+         auto result = ([&] -> std::optional<uint32_t> {
+             Dl_info info { };
+             if (!dladdr(jsFunctionAddr, &info))
+diff --git a/Source/WTF/wtf/MemoryPressureHandler.cpp b/Source/WTF/wtf/MemoryPressureHandler.cpp
+index f8b632a3..90d86cf6 100644
+--- a/Source/WTF/wtf/MemoryPressureHandler.cpp
++++ b/Source/WTF/wtf/MemoryPressureHandler.cpp
+@@ -68,7 +68,7 @@ static MemoryPressureHandler* memoryPressureHandlerIfExists()
+ }
+ 
+ MemoryPressureHandler::MemoryPressureHandler()
+-#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX)
++#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX) || OS(IRIX)
+     : m_holdOffTimer(RunLoop::mainSingleton(), "MemoryPressureHandler::HoldOffTimer"_s, this, &MemoryPressureHandler::holdOffTimerFired)
+ #elif OS(WINDOWS)
+     : m_windowsMeasurementTimer(RunLoop::mainSingleton(), "MemoryPressureHandler::WindowsMeasurementTimer"_s, this, &MemoryPressureHandler::windowsMeasurementTimerFired)
+diff --git a/Source/WTF/wtf/MemoryPressureHandler.h b/Source/WTF/wtf/MemoryPressureHandler.h
+index e64274f3..abd8103b 100644
+--- a/Source/WTF/wtf/MemoryPressureHandler.h
++++ b/Source/WTF/wtf/MemoryPressureHandler.h
+@@ -98,7 +98,7 @@ public:
+     WTF_EXPORT_PRIVATE void setMemoryFootprintPollIntervalForTesting(Seconds);
+     WTF_EXPORT_PRIVATE void setShouldUsePeriodicMemoryMonitor(bool);
+ 
+-#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX)
++#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX) || OS(IRIX)
+     WTF_EXPORT_PRIVATE void triggerMemoryPressureEvent(bool isCritical);
+ #endif
+ 
+@@ -269,7 +269,7 @@ private:
+     Win32Handle m_lowMemoryHandle;
+ #endif
+ 
+-#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX)
++#if OS(LINUX) || OS(FREEBSD) || OS(HAIKU) || OS(QNX) || OS(IRIX)
+     RunLoop::Timer m_holdOffTimer;
+     void holdOffTimerFired();
+ #endif
+diff --git a/Source/WTF/wtf/PlatformHave.h b/Source/WTF/wtf/PlatformHave.h
+index 223592fc..80be0abd 100644
+--- a/Source/WTF/wtf/PlatformHave.h
++++ b/Source/WTF/wtf/PlatformHave.h
+@@ -420,7 +420,7 @@
+ #define HAVE_URL_FORMATTING 1
+ #endif
+ 
+-#if !OS(WINDOWS) && !OS(QNX)
++#if !OS(WINDOWS) && !OS(QNX) && !OS(IRIX)
+ #define HAVE_STACK_BOUNDS_FOR_NEW_THREAD 1
+ #endif
+ 
+diff --git a/Source/WTF/wtf/PlatformOS.h b/Source/WTF/wtf/PlatformOS.h
+index e3184e90..325092a0 100644
+--- a/Source/WTF/wtf/PlatformOS.h
++++ b/Source/WTF/wtf/PlatformOS.h
+@@ -107,6 +107,11 @@
+ #define WTF_OS_HURD 1
+ #endif
+ 
++/* OS(IRIX) - SGI IRIX */
++#if defined(__sgi)
++#define WTF_OS_IRIX 1
++#endif
++
+ /* OS(LINUX) - Linux */
+ #if defined(__linux__)
+ #define WTF_OS_LINUX 1
+@@ -139,6 +144,7 @@
+     || OS(FUCHSIA)          \
+     || OS(HAIKU)            \
+     || OS(HURD)             \
++    || OS(IRIX)             \
+     || OS(LINUX)            \
+     || OS(NETBSD)           \
+     || OS(OPENBSD)          \
+diff --git a/Source/WTF/wtf/PlatformWPE.cmake b/Source/WTF/wtf/PlatformWPE.cmake
+index 3d431a65..70085446 100644
+--- a/Source/WTF/wtf/PlatformWPE.cmake
++++ b/Source/WTF/wtf/PlatformWPE.cmake
+@@ -78,6 +78,11 @@ list(APPEND WTF_PRIVATE_DEFINITIONS
+     PKGDATADIR="${CMAKE_INSTALL_FULL_DATADIR}/wpe-webkit-${WPE_API_VERSION}"
+ )
+ 
++# Real-time threads are Linux's (rtkit over D-Bus, eventfd).
++if (CMAKE_SYSTEM_NAME STREQUAL "IRIX")
++    list(REMOVE_ITEM WTF_SOURCES linux/RealTimeThreads.cpp)
++endif ()
++
+ if (ENABLE_JOURNALD_LOG)
+     list(APPEND WTF_LIBRARIES Journald::Journald)
+ endif ()
+diff --git a/Source/WTF/wtf/ProcessMemoryStatus.h b/Source/WTF/wtf/ProcessMemoryStatus.h
+index 44f924d9..49b2a29f 100644
+--- a/Source/WTF/wtf/ProcessMemoryStatus.h
++++ b/Source/WTF/wtf/ProcessMemoryStatus.h
+@@ -25,7 +25,7 @@
+ 
+ #pragma once
+ 
+-#if OS(LINUX) || OS(HAIKU)
++#if OS(LINUX) || OS(HAIKU) || OS(IRIX)
+ 
+ #include <wtf/ForbidHeapAllocation.h>
+ 
+@@ -47,4 +47,4 @@ public:
+ 
+ using WTF::ProcessMemoryStatus;
+ 
+-#endif // OS(LINUX) || OS(HAIKU)
++#endif // OS(LINUX) || OS(HAIKU) || OS(IRIX)
+diff --git a/Source/WTF/wtf/RAMSize.cpp b/Source/WTF/wtf/RAMSize.cpp
+index 405cbecd..d939424e 100644
+--- a/Source/WTF/wtf/RAMSize.cpp
++++ b/Source/WTF/wtf/RAMSize.cpp
+@@ -33,6 +33,9 @@
+ #elif USE(SYSTEM_MALLOC)
+ #if OS(LINUX) || OS(FREEBSD)
+ #include <sys/sysinfo.h>
++#elif OS(IRIX)
++#include <sys/sysmp.h>
++#include <unistd.h>
+ #elif OS(UNIX) || OS(HAIKU)
+ #include <unistd.h>
+ #endif // OS(LINUX) || OS(FREEBSD) || OS(UNIX) || OS(HAIKU)
+@@ -64,6 +67,12 @@ static size_t computeRAMSize()
+     struct sysinfo si;
+     sysinfo(&si);
+     return si.totalram * si.mem_unit;
++#elif OS(IRIX)
++    // No _SC_PHYS_PAGES: the kernel's real-memory counters.
++    struct rminfo info { };
++    if (sysmp(MP_SAGET, MPSA_RMINFO, &info, sizeof(info)) < 0)
++        return 512 * MB;
++    return static_cast<size_t>(info.physmem) * getpagesize();
+ #elif OS(UNIX) || OS(HAIKU)
+     long pages = sysconf(_SC_PHYS_PAGES);
+     long pageSize = sysconf(_SC_PAGE_SIZE);
+diff --git a/Source/WTF/wtf/RawHex.h b/Source/WTF/wtf/RawHex.h
+index 2e375967..a41e191a 100644
+--- a/Source/WTF/wtf/RawHex.h
++++ b/Source/WTF/wtf/RawHex.h
+@@ -52,7 +52,7 @@ public:
+         : RawHex(static_cast<uintptr_t>(value))
+     { }
+ 
+-#if CPU(ADDRESS64) || OS(DARWIN) || OS(HAIKU)
++#if CPU(ADDRESS64) || OS(DARWIN) || OS(HAIKU) || OS(IRIX)
+     // These causes build errors for CPU(ADDRESS32) on some ports because int32_t
+     // is already handled by intptr_t, and uint32_t is handled by uintptr_t.
+     explicit RawHex(int32_t value)
+diff --git a/Source/WTF/wtf/StackBounds.cpp b/Source/WTF/wtf/StackBounds.cpp
+index d928bed8..3063847b 100644
+--- a/Source/WTF/wtf/StackBounds.cpp
++++ b/Source/WTF/wtf/StackBounds.cpp
+@@ -46,6 +46,15 @@
+ #include <sys/storage.h>
+ #endif
+ 
++#if OS(IRIX)
++#include <fcntl.h>
++#include <stdio.h>
++#include <sys/ioctl.h>
++#include <sys/procfs.h>
++#include <sys/resource.h>
++#include <unistd.h>
++#endif
++
+ #endif
+ 
+ namespace WTF {
+@@ -93,6 +102,64 @@ WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
+     return StackBounds { origin, bound };
+ }
+ 
++#elif OS(IRIX)
++
++// IRIX has no way to ask for a thread's stack (no pthread_getattr_np), so
++// look for the mapping that holds the stack pointer in /proc: a thread's
++// stack is one of its own, above a guard it cannot access; the main
++// thread's is the one the kernel grows on faults (MA_STACK), up to
++// RLIMIT_STACK. Only ever asked from the thread itself
++// (!HAVE(STACK_BOUNDS_FOR_NEW_THREAD)).
++StackBounds StackBounds::currentThreadStackBoundsInternal()
++{
++    volatile char here = 0;
++    uintptr_t sp = reinterpret_cast<uintptr_t>(&here);
++    uintptr_t pageSize = static_cast<uintptr_t>(getpagesize());
++    uintptr_t start = 0, end = 0, previousEnd = 0;
++    bool growsOnFaults = false;
++
++    char path[32];
++    snprintf(path, sizeof(path), "/proc/%d", static_cast<int>(getpid()));
++    int fd = open(path, O_RDONLY);
++    int count = 0;
++    if (fd >= 0 && ioctl(fd, PIOCNMAP, &count) >= 0 && count > 0) {
++        // One more than asked for: the list ends with an empty entry.
++        auto maps = std::make_unique<prmap_t[]>(count + 1);
++        if (ioctl(fd, PIOCMAP, maps.get()) >= 0) {
++            for (int i = 0; i < count; ++i) {
++                uintptr_t low = reinterpret_cast<uintptr_t>(maps[i].pr_vaddr);
++                uintptr_t high = low + maps[i].pr_size;
++                if (sp >= low && sp < high) {
++                    start = low;
++                    end = high;
++                    growsOnFaults = maps[i].pr_mflags & MA_STACK;
++                } else if (high <= sp && high > previousEnd)
++                    previousEnd = high;
++            }
++        }
++    }
++    if (fd >= 0)
++        close(fd);
++
++    if (!end) {
++        // No /proc: a small stack just around here.
++        end = (sp + pageSize) & ~(pageSize - 1);
++        return StackBounds { reinterpret_cast<void*>(end), reinterpret_cast<void*>(end - 64 * KB) };
++    }
++    if (growsOnFaults) {
++        rlimit limit;
++        getrlimit(RLIMIT_STACK, &limit);
++        rlim_t size = limit.rlim_cur;
++        if (size == RLIM_INFINITY || size > end)
++            size = 8 * MB;
++        start = end - size;
++        // Not into the mapping below it, and leave a page for a guard.
++        if (start < previousEnd + pageSize)
++            start = previousEnd + pageSize;
++    }
++    return StackBounds { reinterpret_cast<void*>(end), reinterpret_cast<void*>(start) };
++}
++
+ #elif OS(UNIX) || OS(HAIKU)
+ 
+ #if OS(OPENBSD)
+diff --git a/Source/WTF/wtf/linux/CurrentProcessMemoryStatus.cpp b/Source/WTF/wtf/linux/CurrentProcessMemoryStatus.cpp
+index 9dd80c24..100382f9 100644
+--- a/Source/WTF/wtf/linux/CurrentProcessMemoryStatus.cpp
++++ b/Source/WTF/wtf/linux/CurrentProcessMemoryStatus.cpp
+@@ -31,8 +31,35 @@
+ #include <unistd.h>
+ #include <wtf/PageBlock.h>
+ 
++#if OS(IRIX)
++#include <fcntl.h>
++#include <sys/ioctl.h>
++#include <sys/procfs.h>
++#endif
++
+ namespace WTF {
+ 
++#if OS(IRIX)
++// No /proc/self/statm: the process image and resident set sizes that ps(1)
++// shows, from /proc/<pid>.
++void currentProcessMemoryStatus(ProcessMemoryStatus& memoryStatus)
++{
++    char path[32];
++    snprintf(path, sizeof(path), "/proc/%d", static_cast<int>(getpid()));
++    int fd = open(path, O_RDONLY);
++    if (fd < 0)
++        return;
++    prpsinfo_t info { };
++    int result = ioctl(fd, PIOCPSINFO, &info);
++    close(fd);
++    if (result < 0)
++        return;
++    size_t pageSize = static_cast<size_t>(getpagesize());
++    memoryStatus.size = static_cast<size_t>(info.pr_size) * pageSize;
++    memoryStatus.resident = static_cast<size_t>(info.pr_rssize) * pageSize;
++}
++#else
++
+ IGNORE_CLANG_WARNINGS_BEGIN("unsafe-buffer-usage-in-libc-call")
+ void currentProcessMemoryStatus(ProcessMemoryStatus& memoryStatus)
+ {
+@@ -64,5 +91,6 @@ void currentProcessMemoryStatus(ProcessMemoryStatus& memoryStatus)
+     memoryStatus.dt = intValue * pageSize;
+ }
+ IGNORE_CLANG_WARNINGS_END
++#endif // OS(IRIX)
+ 
+ } // namespace WTF
+diff --git a/Source/WTF/wtf/posix/CPUTimePOSIX.cpp b/Source/WTF/wtf/posix/CPUTimePOSIX.cpp
+index beeb3e81..a02e5dfc 100644
+--- a/Source/WTF/wtf/posix/CPUTimePOSIX.cpp
++++ b/Source/WTF/wtf/posix/CPUTimePOSIX.cpp
+@@ -48,7 +48,12 @@ std::optional<CPUTime> CPUTime::get()
+ Seconds CPUTime::forCurrentThread()
+ {
+     struct timespec ts { };
++#if defined(CLOCK_THREAD_CPUTIME_ID)
+     int ret = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
++#else
++    // IRIX keeps no CPU time per thread: the process's is the closest.
++    int ret = clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
++#endif
+     RELEASE_ASSERT(!ret);
+     return Seconds(ts.tv_sec) + Seconds::fromNanoseconds(ts.tv_nsec);
+ }
+diff --git a/Source/WTF/wtf/unix/MemoryPressureHandlerUnix.cpp b/Source/WTF/wtf/unix/MemoryPressureHandlerUnix.cpp
+index 385c9aa9..47251fea 100644
+--- a/Source/WTF/wtf/unix/MemoryPressureHandlerUnix.cpp
++++ b/Source/WTF/wtf/unix/MemoryPressureHandlerUnix.cpp
+@@ -35,7 +35,7 @@
+ #include <wtf/MemoryFootprint.h>
+ #include <wtf/text/WTFString.h>
+ 
+-#if OS(LINUX)
++#if OS(LINUX) || OS(IRIX)
+ #include <wtf/linux/CurrentProcessMemoryStatus.h>
+ #elif OS(HAIKU)
+ #include <wtf/haiku/CurrentProcessMemoryStatus.h>
+@@ -113,7 +113,7 @@ void MemoryPressureHandler::holdOff(Seconds seconds)
+ 
+ static size_t processMemoryUsage()
+ {
+-#if OS(LINUX) || OS(HAIKU)
++#if OS(LINUX) || OS(HAIKU) || OS(IRIX)
+     ProcessMemoryStatus memoryStatus;
+     currentProcessMemoryStatus(memoryStatus);
+     return (memoryStatus.resident - memoryStatus.shared);
+diff --git a/Source/WebCore/bindings/js/JSHTMLMediaElementCustom.cpp b/Source/WebCore/bindings/js/JSHTMLMediaElementCustom.cpp
+index fcbad044..c48ac1ca 100644
+--- a/Source/WebCore/bindings/js/JSHTMLMediaElementCustom.cpp
++++ b/Source/WebCore/bindings/js/JSHTMLMediaElementCustom.cpp
+@@ -24,6 +24,9 @@
+  */
+ 
+ #include "config.h"
++
++#if ENABLE(VIDEO)
++
+ #include "JSHTMLMediaElement.h"
+ 
+ #include "TrackOpaqueRoot.h"
+@@ -40,3 +43,5 @@ void JSHTMLMediaElement::visitAdditionalChildren(Visitor& visitor)
+ DEFINE_VISIT_ADDITIONAL_CHILDREN(JSHTMLMediaElement);
+ 
+ } // namespace WebCore
++
++#endif // ENABLE(VIDEO)
+diff --git a/Source/WebCore/css/calc/CSSCalcTree+NumericIdentity.h b/Source/WebCore/css/calc/CSSCalcTree+NumericIdentity.h
+index dadf6966..8fd150f7 100644
+--- a/Source/WebCore/css/calc/CSSCalcTree+NumericIdentity.h
++++ b/Source/WebCore/css/calc/CSSCalcTree+NumericIdentity.h
+@@ -27,6 +27,11 @@
+ #include "CSSCalcTree.h"
+ #include "CSSUnits.h"
+ 
++// IRIX's <sys/param.h> defines HZ, the clock tick rate.
++#ifdef HZ
++#undef HZ
++#endif
++
+ namespace WebCore {
+ namespace CSSCalc {
+ 
+diff --git a/Source/WebCore/loader/DocumentLoader.cpp b/Source/WebCore/loader/DocumentLoader.cpp
+index 0002b2a5..209f954a 100644
+--- a/Source/WebCore/loader/DocumentLoader.cpp
++++ b/Source/WebCore/loader/DocumentLoader.cpp
+@@ -51,6 +51,7 @@
+ #include "DocumentView.h"
+ #include "DocumentWindow.h"
+ #include "DocumentWriter.h"
++#include "EventLoop.h"
+ #include "ElementChildIteratorInlines.h"
+ #include "Event.h"
+ #include "EventNames.h"
+diff --git a/Source/WebCore/platform/unix/SharedMemoryUnix.cpp b/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
+index c534f8fe..425da6e7 100644
+--- a/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
++++ b/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
+@@ -104,11 +104,16 @@ static UnixFileDescriptor createSharedMemory()
+ #else
+     CString tempName;
+     for (int tries = 0; fileDescriptor == -1 && tries < 10; ++tries) {
++#if OS(IRIX)
++        // IRIX's shm_open takes the name as a file path: "/WK2..." would be in /.
++        auto name = makeString("/tmp/.WK2SharedMemory."_s, cryptographicallyRandomNumber<unsigned>());
++#else
+         auto name = makeString("/WK2SharedMemory."_s, cryptographicallyRandomNumber<unsigned>());
++#endif
+         tempName = name.utf8();
+ 
+         do {
+-            fileDescriptor = shm_open(tempName.data(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
++            fileDescriptor = shm_open(tempName.data(), O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
+         } while (fileDescriptor == -1 && errno == EINTR);
+     }
+ 
+diff --git a/Source/WebKit/Platform/IPC/ArgumentCoders.h b/Source/WebKit/Platform/IPC/ArgumentCoders.h
+index 311aba7d..7bb1736a 100644
+--- a/Source/WebKit/Platform/IPC/ArgumentCoders.h
++++ b/Source/WebKit/Platform/IPC/ArgumentCoders.h
+@@ -48,7 +48,9 @@
+ #include "ArgumentCodersAndroid.h"
+ #endif
+ #if USE(GLIB)
+-#include "ArgumentCodersGlib.h"
++// Not ArgumentCodersGlib.h: Shared/glib/ArgumentCodersGLib.h differs only
++// in case, and case-insensitive file systems (macOS) confuse the two.
++#include "IPCArgumentCodersGlib.h"
+ #include "RendererBufferFormat.h"
+ #endif
+ #if USE(UNIX_DOMAIN_SOCKETS)
+diff --git a/Source/WebKit/Platform/IPC/glib/ArgumentCodersGlib.h b/Source/WebKit/Platform/IPC/glib/IPCArgumentCodersGlib.h
+similarity index 100%
+rename from Source/WebKit/Platform/IPC/glib/ArgumentCodersGlib.h
+rename to Source/WebKit/Platform/IPC/glib/IPCArgumentCodersGlib.h
+diff --git a/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp b/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
+index 5ba3ea56..95b905e9 100644
+--- a/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
++++ b/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
+@@ -35,6 +35,14 @@ SocketPair createPlatformConnection(int socketType, unsigned options)
+ {
+     std::array<int, 2> sockets;
+ 
++#if OS(IRIX)
++    // IRIX has no SOCK_SEQPACKET for AF_UNIX (EPROTONOSUPPORT). A datagram
++    // pair keeps message boundaries and passes descriptors too, as the
++    // Darwin port relies on.
++    if (socketType == SOCK_SEQPACKET)
++        socketType = SOCK_DGRAM;
++#endif
++
+ #if OS(LINUX)
+     if ((options & SetCloexecOnServer) || (options & SetCloexecOnClient)) {
+         RELEASE_ASSERT(socketpair(AF_UNIX, socketType | SOCK_CLOEXEC, 0, sockets.data()) != -1);
+-- 
+2.54.0 (Apple Git-157)
+

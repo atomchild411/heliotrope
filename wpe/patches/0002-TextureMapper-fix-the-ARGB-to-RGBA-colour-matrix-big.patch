@@ -1,0 +1,38 @@
+From af078977816fc9a2fff95e38855f5b6af3fc182d Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 08:31:13 -0800
+Subject: [PATCH 2/3] TextureMapper: fix the ARGB-to-RGBA colour matrix
+ (big-endian)
+
+The shaders compute matrix * color with m11..m14 as the first column, so the
+ARGB matrix produced (B, A, R, G): opaque content turned transparent on
+big-endian hosts, where Cairo tiles upload as A, R, G, B. The BGRA swap used
+on little-endian is its own transpose, which is why it never showed there.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/WebCore/platform/graphics/texmap/TextureMapper.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/Source/WebCore/platform/graphics/texmap/TextureMapper.cpp b/Source/WebCore/platform/graphics/texmap/TextureMapper.cpp
+index 4cd60795..d019a64b 100644
+--- a/Source/WebCore/platform/graphics/texmap/TextureMapper.cpp
++++ b/Source/WebCore/platform/graphics/texmap/TextureMapper.cpp
+@@ -466,8 +466,12 @@ static TransformationMatrix colorSpaceMatrixForFlags(OptionSet<TextureMapperFlag
+     TransformationMatrix matrix;
+     if (flags.contains(TextureMapperFlags::ShouldConvertTextureBGRAToRGBA))
+         matrix.setMatrix(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+-    else if (flags.contains(TextureMapperFlags::ShouldConvertTextureARGBToRGBA))
+-        matrix.setMatrix(0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0);
++    else if (flags.contains(TextureMapperFlags::ShouldConvertTextureARGBToRGBA)) {
++        // The shaders compute matrix * color with m11..m14 as the first column, so
++        // (R, G, B, A) = (s.g, s.b, s.a, s.r) needs m21, m32, m43 and m14 set. (The
++        // BGRA swap is its own transpose; this cycle is not.)
++        matrix.setMatrix(0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
++    }
+ 
+     return matrix;
+ }
+-- 
+2.54.0 (Apple Git-157)
+
