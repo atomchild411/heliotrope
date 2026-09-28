@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ipc.h>
+#include <sys/resource.h>
 #include <sys/shm.h>
 
 #define BAR_HEIGHT 30           /* toolbar */
@@ -1123,6 +1124,20 @@ static gboolean x_ready(gint fd, GIOCondition condition, gpointer data)
 
 /* --- setup --------------------------------------------------------------------- */
 
+/* IRIX starts processes with 200 descriptors. A page like GitHub loads ~140
+ * resources at once, and WebKit passes each chunk of their data between its
+ * processes as a shared-memory file descriptor: at 200 the Web process ran
+ * out and the page never finished loading. Raise the soft limit to the hard
+ * one; the Web and network processes inherit it. */
+static void raise_descriptor_limit(void)
+{
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
+        rl.rlim_cur = rl.rlim_max;
+        setrlimit(RLIMIT_NOFILE, &rl);
+    }
+}
+
 static unsigned long color(App *app, int r, int g, int b)
 {
     return ((unsigned long)r << app->rshift) | ((unsigned long)g << app->gshift) | ((unsigned long)b << app->bshift);
@@ -1223,6 +1238,7 @@ int main(int argc, char **argv)
             url = argv[i];
     }
     app.home = g_strdup(getenv("HELIOTROPE_HOME") ? getenv("HELIOTROPE_HOME") : url);
+    raise_descriptor_limit();
 
     app.edit = g_string_new(NULL);
     if (!open_window(&app))

@@ -49,8 +49,22 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
 
 ## Known problems
 
-- GitHub (github.com/techomancer/iris) never finishes loading: the Web
-  process grows to ~200 MB in 4 minutes, then stays flat.
+- **Descriptors** (GitHub stalled forever): IRIX starts processes with 200
+  open files; WebKit passes every IPC message over 4 KB as a shared-memory
+  file descriptor, so ~140 parallel loads ran the Web process out and the
+  page never finished, silently. Heliotrope now raises the soft limit to the
+  hard one (2500) and GitHub loads (Web process ~196 MB private). Still to
+  do: close-on-exec for received descriptors (IRIX has no MSG_CMSG_CLOEXEC or
+  SOCK_CLOEXEC; WebKit spawns with "inherit all fds"), log EMFILE instead of
+  hanging, and consider throttling loads on very small machines.
+- **IPC over SOCK_DGRAM** (our replacement for the SEQPACKET IRIX lacks): a
+  full receive buffer (16 KB) returns ENOBUFS, not EAGAIN, and poll() still
+  says writable; WebKit logs and drops the message. Retry after a short
+  sleep, and raise SO_SNDBUF/SO_RCVBUF. Datagrams max out at 8192 bytes.
+- **Orphans**: when heliotrope exits, its Web and network processes stay
+  (reparented to init) without ever seeing the connection close. Add IRIX's
+  prctl(PR_TERMCHILD) to the auxiliary processes, and find why the close is
+  not delivered (probably the inherited-descriptor leak above).
 - Packages built before LLVM f5d5847 may carry the MIPS64 truncation bug;
   rebuild pkgsrc with the fixed compiler.
 
