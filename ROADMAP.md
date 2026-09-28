@@ -16,9 +16,11 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
    the relocated data pages stay private (7.6 MB per process for
    libWPEWebKit). Assign distinct bases in the pkgsrc build.
    - Follow-on: **Quickstart** (see below), possibly everywhere.
-4. **Two CPU builds.** Keep a MIPS III build (R4000/R4400/R4600), add a
-   MIPS IV one (`-mcpu=r10000`: R5000, R8000, R10000 and later). Measure the
-   gain on the interpreter first.
+4. **MIPS IV everywhere** (decided 2026-09-28): pkgsrc packages and WebKit
+   build with `-march=mips4 -mtune=r10000`, so R5000, R8000, R10000 and later;
+   R4000/R4400/R4600 are out. The toolchain runtimes stay MIPS III. Measure
+   the gain against the MIPS III baseline, then rebuild every package (which
+   also picks up LLVM f5d5847).
 5. **Shrink ICU data** with ICU's build-time data filter.
 6. **Tune JSC's heap for small machines** (GC earlier; its sizing reads RAM).
 7. **Malloc**: try IRIX `mallopt()` tuning and SGI's libmalloc, then a modern
