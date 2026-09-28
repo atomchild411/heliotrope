@@ -1534,6 +1534,10 @@ int main(int argc, char **argv)
         g_object_unref(context);
     }
     g_object_unref(display);
+    /* HELIOTROPE_CONSOLE=1: the page's console messages (including what the
+     * content blocker stopped) go to stdout, for testing. */
+    if (getenv("HELIOTROPE_CONSOLE"))
+        webkit_settings_set_enable_write_console_messages_to_stdout(webkit_web_view_get_settings(app.web_view), TRUE);
     app.view = webkit_web_view_get_wpe_view(app.web_view);
     wpe_toplevel_resize(wpe_view_get_toplevel(app.view), page_width(&app), page_height(&app));
     g_signal_connect(app.view, "buffer-rendered", G_CALLBACK(buffer_rendered), &app);
