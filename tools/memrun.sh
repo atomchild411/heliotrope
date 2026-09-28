@@ -9,7 +9,7 @@ lib=/opt/pkgsrc/lib/libWPEWebKit-2.0.so.1.9.10
 wki=`ls -i $lib | awk '{print $1}'`
 cd /var/tmp
 rm -f $name.mlog
-DISPLAY=:0 /opt/pkgsrc/bin/heliotrope -g 620x640+640+40 "$url" > $name.mlog 2>&1 &
+DISPLAY=:0 ${HELIOTROPE_BIN:-/opt/pkgsrc/bin/heliotrope} -g 620x640+640+40 "$url" > $name.mlog 2>&1 &
 H=$!
 i=0
 while [ $i -lt $limit ] && kill -0 $H 2>/dev/null && ! egrep "loaded|failed" $name.mlog >/dev/null 2>&1; do
