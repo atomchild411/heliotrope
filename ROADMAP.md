@@ -43,6 +43,25 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
   geolocation, notifications, pdf.js, smooth scrolling, touch, MHTML,
   offscreen canvas, image-diff off), with blocking off and on.
 
+## JavaScript speed: replacing the CLoop
+
+JavaScriptCore's interpreter (LLInt) is written in offlineasm, with a backend
+per CPU; without one it is emitted as C++ (the CLoop), several times slower.
+JSC had MIPS support (LLInt backend, macro-assembler, baseline JIT, DFG) until
+WebKit 2.44 removed it as unmaintained; it targeted o32, MIPS32r2 and in
+practice little-endian, so it never fit IRIX (n32, MIPS IV: no ins/ext,
+seb/seh, 3-operand mul, rotr; big-endian) as it was.
+
+1. **MIPS n32 LLInt backend** (next big JavaScript-speed item, after the lean
+   build and the memory work): revive offlineasm's MIPS backend from WebKit
+   2.42 and port it to n32, big-endian, MIPS IV. Replaces the CLoop; no JIT,
+   no executable-memory pool, so still small-machine friendly. Measure.
+2. **Baseline JIT** on top: a MIPS n32 macro-assembler, instruction-cache
+   flushing (IRIX `cacheflush`), executable memory. Faster again, but every
+   Web process pays for a code pool. On the emulator it also exercises iris's
+   self-modifying-code handling.
+3. DFG/FTL: not realistic (FTL's B3 backend exists only for x86-64/ARM64).
+
 ## Decisions pending
 
 - **Replace softpipe** (compositing now runs on Mesa's software rasterizer,
