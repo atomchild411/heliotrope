@@ -1,0 +1,112 @@
+From 3330a9b53df47f7476887c06c010cbfb4e09b2cd Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 09:32:33 -0800
+Subject: [PATCH] WPE: process-swap-on-cross-site-navigation-enabled property
+
+WPE always swapped Web processes on cross-site navigation and kept a cache of
+spare ones. Expose the GTK3 property on WPE too (default on, as before); when
+it is off, one Web process serves every site and none are cached or
+prewarmed: about 100 MB per process saved on small machines.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../UIProcess/API/glib/WebKitWebContext.cpp   | 31 ++++++++++++++++---
+ 1 file changed, 26 insertions(+), 5 deletions(-)
+
+diff --git a/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp b/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
+index 5cbc8739..54eb9f77 100644
+--- a/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
++++ b/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
+@@ -129,8 +129,10 @@ enum {
+ #if !ENABLE(2022_GLIB_API)
+     PROP_WEBSITE_DATA_MANAGER,
+ #endif
+-#if PLATFORM(GTK) && !USE(GTK4)
++#if (PLATFORM(GTK) && !USE(GTK4)) || PLATFORM(WPE)
+     PROP_PSON_ENABLED,
++#endif
++#if PLATFORM(GTK) && !USE(GTK4)
+     PROP_USE_SYSTEM_APPEARANCE_FOR_SCROLLBARS,
+ #endif
+     PROP_MEMORY_PRESSURE_SETTINGS,
+@@ -249,8 +251,10 @@ struct _WebKitWebContextPrivate {
+ 
+     RefPtr<WebProcessPool> processPool;
+     bool clientsDetached;
+-#if PLATFORM(GTK) && !USE(GTK4)
++#if (PLATFORM(GTK) && !USE(GTK4)) || PLATFORM(WPE)
+     bool psonEnabled;
++#endif
++#if PLATFORM(GTK) && !USE(GTK4)
+ #if USE(CAIRO)
+     bool useSystemAppearanceForScrollbars;
+ #endif
+@@ -369,10 +373,12 @@ static void webkitWebContextGetProperty(GObject* object, guint propID, GValue* v
+         g_value_set_object(value, webkit_web_context_get_website_data_manager(context));
+         break;
+ #endif
+-#if PLATFORM(GTK) && !USE(GTK4)
++#if (PLATFORM(GTK) && !USE(GTK4)) || PLATFORM(WPE)
+     case PROP_PSON_ENABLED:
+         g_value_set_boolean(value, context->priv->psonEnabled);
+         break;
++#endif
++#if PLATFORM(GTK) && !USE(GTK4)
+     case PROP_USE_SYSTEM_APPEARANCE_FOR_SCROLLBARS:
+         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
+         g_value_set_boolean(value, webkit_web_context_get_use_system_appearance_for_scrollbars(context));
+@@ -404,10 +410,12 @@ static void webkitWebContextSetProperty(GObject* object, guint propID, const GVa
+         break;
+     }
+ #endif
+-#if PLATFORM(GTK) && !USE(GTK4)
++#if (PLATFORM(GTK) && !USE(GTK4)) || PLATFORM(WPE)
+     case PROP_PSON_ENABLED:
+         context->priv->psonEnabled = g_value_get_boolean(value);
+         break;
++#endif
++#if PLATFORM(GTK) && !USE(GTK4)
+     case PROP_USE_SYSTEM_APPEARANCE_FOR_SCROLLBARS:
+         ALLOW_DEPRECATED_DECLARATIONS_BEGIN
+         webkit_web_context_set_use_system_appearance_for_scrollbars(context, g_value_get_boolean(value));
+@@ -447,6 +455,13 @@ static void webkitWebContextConstructed(GObject* object)
+ #if USE(CAIRO)
+     configuration->setUseSystemAppearanceForScrollbars(priv->useSystemAppearanceForScrollbars);
+ #endif
++#elif PLATFORM(WPE)
++    configuration->setProcessSwapsOnNavigation(priv->psonEnabled);
++    if (!priv->psonEnabled) {
++        // One Web process for every site: keep no spare ones either.
++        configuration->setUsesWebProcessCache(false);
++        configuration->setIsAutomaticProcessWarmingEnabled(false);
++    }
+ #else
+     configuration->setProcessSwapsOnNavigation(true);
+ #endif
+@@ -563,7 +578,7 @@ static void webkit_web_context_class_init(WebKitWebContextClass* webContextClass
+             static_cast<GParamFlags>(WEBKIT_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+ #endif
+ 
+-#if PLATFORM(GTK) && !USE(GTK4)
++#if (PLATFORM(GTK) && !USE(GTK4)) || PLATFORM(WPE)
+     /**
+      * WebKitWebContext:process-swap-on-cross-site-navigation-enabled:
+      *
+@@ -581,8 +596,14 @@ static void webkit_web_context_class_init(WebKitWebContextClass* webContextClass
+         g_param_spec_boolean(
+             "process-swap-on-cross-site-navigation-enabled",
+             nullptr, nullptr,
++#if PLATFORM(WPE)
++            TRUE, // WPE always swapped processes before the property existed there
++#else
+             FALSE,
++#endif
+             static_cast<GParamFlags>(WEBKIT_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
++#endif
++#if PLATFORM(GTK) && !USE(GTK4)
+ 
+     /**
+      * WebKitWebContext:use-system-appearance-for-scrollbars:
+-- 
+2.54.0 (Apple Git-157)
+

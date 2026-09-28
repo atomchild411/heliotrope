@@ -26,10 +26,10 @@ done
 I=$S/opt/pkgsrc/include
 PKGCONFIG_CFLAGS="-I$P/include/wpe-webkit-2.0 -I$P/include/wpe-webkit-2.0/wpe-platform -I$I/glib-2.0 -I$S/opt/pkgsrc/lib/glib-2.0/include -I$I/libsoup-3.0 -I$I"
 mkdir -p "$P/bin"
-"$CC" -target mips64-sgi-irix6.5 --sysroot="$S" -O2 -Wall $PKGCONFIG_CFLAGS \
-    -o "$P/bin/heliotrope" "$HERE/heliotrope/heliotrope.c" \
+"$CC" -target mips64-sgi-irix6.5 --sysroot="$S" -O2 -Wall -Wextra -Wno-unused-parameter $PKGCONFIG_CFLAGS \
+    -o "$P/bin/heliotrope" "$WS/code/heliotrope/src/heliotrope.c" \
     -L"$P/lib" -L"$S/opt/pkgsrc/lib" -Wl,-rpath,/opt/pkgsrc/lib \
-    -lWPEWebKit-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lX11
+    -lWPEWebKit-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lXext -lX11
 "$STRIP" "$P/bin/heliotrope"
 
 cd "$P"
@@ -67,6 +67,7 @@ sqlite3>=3
 png>=1.6
 dejavu-ttf>=2
 libX11>=1.6
+libXext>=1.1
 EOF
 { echo "@name wpewebkit-heliotrope-2.52.6"; cat deps; echo "@cwd /opt/pkgsrc"; echo "@owner root"; echo "@group sys"; cat PLIST; } > PLIST.full
 rm -f "$OUT/wpewebkit-heliotrope-2.52.6.tgz"
