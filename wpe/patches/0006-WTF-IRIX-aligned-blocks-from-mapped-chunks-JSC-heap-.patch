@@ -1,0 +1,186 @@
+From c267311816abf58d48ddc44bac7ab6429b9bd431 Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 13:19:58 -0800
+Subject: [PATCH 6/7] WTF: IRIX aligned blocks from mapped chunks (JSC heap no
+ longer 2x)
+
+IRIX's memalign (libc's and libmalloc's) reserves the alignment again as
+slack, so JSC's 16 KB-aligned 16 KB blocks cost 32 KB each. With system
+malloc on IRIX, page-aligned blocks up to their alignment come from 1 MB
+chunks mapped at a 1 MB boundary and carved into equal blocks with a free
+list; an empty chunk beyond one spare per size is unmapped (the brk heap
+never shrinks). fastAlignedFree tells the two kinds apart.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/WTF/wtf/FastMalloc.cpp | 140 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 140 insertions(+)
+
+diff --git a/Source/WTF/wtf/FastMalloc.cpp b/Source/WTF/wtf/FastMalloc.cpp
+index b8a269c6..10189aa1 100644
+--- a/Source/WTF/wtf/FastMalloc.cpp
++++ b/Source/WTF/wtf/FastMalloc.cpp
+@@ -146,6 +146,11 @@ WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
+ #include <malloc.h>
+ #endif
+ 
++#if OS(IRIX)
++#include <sys/mman.h>
++#include <wtf/Lock.h>
++#endif
++
+ namespace WTF {
+ 
+ bool isFastMallocEnabled()
+@@ -186,6 +191,139 @@ void fastAlignedFree(void* p)
+ 
+ #else
+ 
++#if OS(IRIX)
++
++// IRIX's memalign (libc's and libmalloc's alike) reserves the alignment again as
++// slack, so JSC's 16 KB-aligned 16 KB heap blocks cost 32 KB each: half the JS
++// heap was padding. Page-aligned blocks of at most their alignment come from
++// 1 MB chunks mapped at a 1 MB boundary instead, carved into equal blocks with
++// a free list each; a chunk that empties goes back to the system (the brk heap
++// never shrinks). Everything else still goes through memalign. Callers always
++// pair fastAlignedMalloc with fastAlignedFree, which tells the two apart.
++namespace {
++
++constexpr size_t alignedChunkSize = 1024 * 1024;
++constexpr unsigned maxAlignedChunks = 2048; // 2 GB of blocks
++
++struct AlignedChunk {
++    char* base;
++    size_t blockSize;
++    char* bump; // next never-used block
++    void* freeList; // blocks returned, linked through their first word
++    unsigned used;
++};
++
++Lock alignedChunksLock;
++AlignedChunk alignedChunks[maxAlignedChunks];
++unsigned alignedChunkCount;
++
++bool usesAlignedChunks(size_t alignment, size_t size)
++{
++    return alignment >= 4096 && alignment <= alignedChunkSize / 16 && !(alignment & (alignment - 1)) && size && size <= alignment;
++}
++
++AlignedChunk* findAlignedChunk(void* p)
++{
++    char* base = reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(p) & ~(alignedChunkSize - 1));
++    for (unsigned i = 0; i < alignedChunkCount; ++i) {
++        if (alignedChunks[i].base == base)
++            return &alignedChunks[i];
++    }
++    return nullptr;
++}
++
++void* allocateAlignedBlock(size_t blockSize)
++{
++    Locker locker { alignedChunksLock };
++    for (unsigned i = 0; i < alignedChunkCount; ++i) {
++        AlignedChunk& chunk = alignedChunks[i];
++        if (chunk.blockSize != blockSize)
++            continue;
++        if (void* block = chunk.freeList) {
++            chunk.freeList = *static_cast<void**>(block);
++            ++chunk.used;
++            return block;
++        }
++        if (chunk.bump < chunk.base + alignedChunkSize) {
++            void* block = chunk.bump;
++            chunk.bump += blockSize;
++            ++chunk.used;
++            return block;
++        }
++    }
++    if (alignedChunkCount == maxAlignedChunks)
++        return nullptr;
++    // Map twice the chunk and keep its 1 MB-aligned middle.
++    void* raw = mmap(nullptr, 2 * alignedChunkSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
++    if (raw == MAP_FAILED)
++        return nullptr;
++    char* start = static_cast<char*>(raw);
++    char* base = reinterpret_cast<char*>((reinterpret_cast<uintptr_t>(start) + alignedChunkSize - 1) & ~(alignedChunkSize - 1));
++    if (base > start)
++        munmap(start, base - start);
++    if (base + alignedChunkSize < start + 2 * alignedChunkSize)
++        munmap(base + alignedChunkSize, start + 2 * alignedChunkSize - (base + alignedChunkSize));
++    AlignedChunk& chunk = alignedChunks[alignedChunkCount++];
++    chunk = { base, blockSize, base + blockSize, nullptr, 1 };
++    return base;
++}
++
++bool freeAlignedBlock(void* p)
++{
++    Locker locker { alignedChunksLock };
++    AlignedChunk* chunk = findAlignedChunk(p);
++    if (!chunk)
++        return false;
++    if (--chunk->used) {
++        *static_cast<void**>(p) = chunk->freeList;
++        chunk->freeList = p;
++        return true;
++    }
++    // Empty: keep it as the one spare of its block size (GC frees and allocates
++    // blocks in waves), unless another empty one of that size already exists.
++    for (unsigned i = 0; i < alignedChunkCount; ++i) {
++        AlignedChunk& other = alignedChunks[i];
++        if (&other != chunk && other.blockSize == chunk->blockSize && !other.used) {
++            munmap(chunk->base, alignedChunkSize);
++            *chunk = alignedChunks[--alignedChunkCount];
++            return true;
++        }
++    }
++    chunk->bump = chunk->base;
++    chunk->freeList = nullptr;
++    return true;
++}
++
++} // namespace
++
++void* tryFastAlignedMalloc(size_t alignment, size_t size)
++{
++    FAIL_IF_EXCEEDS_LIMIT(size);
++    if (usesAlignedChunks(alignment, size)) {
++        if (void* p = allocateAlignedBlock(alignment))
++            return p;
++    }
++    return aligned_alloc(alignment, size);
++}
++
++void* fastAlignedMalloc(size_t alignment, size_t size)
++{
++    ASSERT_IS_WITHIN_LIMIT(size);
++    void* p = tryFastAlignedMalloc(alignment, size);
++    if (!p) [[unlikely]]
++        CRASH();
++    return p;
++}
++
++void fastAlignedFree(void* p)
++{
++    if (p && freeAlignedBlock(p))
++        return;
++    free(p);
++}
++
++#else
++
+ void* fastAlignedMalloc(size_t alignment, size_t size) 
+ {
+     ASSERT_IS_WITHIN_LIMIT(size);
+@@ -206,6 +344,8 @@ void fastAlignedFree(void* p)
+     free(p);
+ }
+ 
++#endif // OS(IRIX)
++
+ #endif // OS(WINDOWS)
+ 
+ TryMallocReturnValue tryFastMalloc(size_t n) 
+-- 
+2.54.0 (Apple Git-157)
+

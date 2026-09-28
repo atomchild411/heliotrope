@@ -1,0 +1,13 @@
+d4-wiki: loaded after ~55s, measured 30s later
+  heliotrop          resident   35632  private    8992  heap     176  webkit   4176  other    4640
+  WPENetwor          resident   48304  private   24912  heap    8160  webkit   9584  other    7168
+  WPEWebPro          resident  132976  private  101024  heap   27120  webkit  41872  other   32032
+d4-github: loaded after ~220s, measured 30s later
+  heliotrop          resident   35664  private    8976  heap     176  webkit   4192  other    4608
+  WPENetwor          resident   45184  private   20848  heap    2848  webkit   9808  other    8192
+  WPEWebPro          resident  198752  private  164112  heap   66320  webkit  45184  other   52608
+d4-google: loaded after ~70s, measured 30s later
+  heliotrop          resident   35808  private    8992  heap     176  webkit   4208  other    4608
+  WPEWebPro          resident  138832  private  106880  heap   29280  webkit  42912  other   34688
+  WPENetwor          resident   47968  private   24416  heap    7520  webkit   9520  other    7376
+PHASE-DONE

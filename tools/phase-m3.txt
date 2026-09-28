@@ -1,0 +1,16 @@
+started
+m3-wiki: loaded after ~60s, measured 30s later
+  heliotrop          resident   35984  private    8736  heap     176  webkit   3584  other    4976
+  WPENetwor          resident   48352  private   24400  heap    8368  webkit   9024  other    7008
+  WPEWebPro          resident  131520  private   91200  heap   30384  webkit  33264  other   27552
+m3-github: loaded after ~170s, measured 30s later
+  heliotrop          resident   35872  private    8672  heap     176  webkit   3584  other    4912
+  WPENetwor          resident   43024  private   19136  heap    2016  webkit   8944  other    8176
+  WPEWebPro          resident  183232  private  140528  heap   66048  webkit  35200  other   39280
+m3-google: loaded after ~80s, measured 30s later
+  heliotrop          resident   36048  private    8576  heap     176  webkit   3552  other    4848
+  WPENetwor          resident   47776  private   23696  heap    5808  webkit   9008  other    8880
+  WPEWebPro          resident  148384  private  107344  heap   46576  webkit  35792  other   24976
+PHASE-DONE
+
+[exited with code 0]

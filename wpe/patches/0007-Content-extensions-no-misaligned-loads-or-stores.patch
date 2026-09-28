@@ -1,0 +1,208 @@
+From 0869ea09291a42e7a44dcede4ab7d0d77efa69d5 Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 13:19:58 -0800
+Subject: [PATCH 7/7] Content extensions: no misaligned loads or stores
+
+Strict-alignment CPUs (MIPS) fault where x86 and ARM do not:
+- SerializedNFA wrote its arrays back to back, so the uint64_t actions could
+  start 4 bytes off 8 in the mapped file: each array now starts at a
+  multiple of its element's alignment (compiling a rule list crashed with a
+  bus error in NFAToDFA).
+- DFA bytecode, serialized actions and strings are packed byte by byte:
+  multi-byte values are now copied in and out rather than read and written
+  through casts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../ContentExtensionActions.cpp               |  9 ++--
+ .../ContentExtensionActions.h                 |  2 +-
+ .../ContentExtensionStringSerialization.cpp   |  5 +-
+ .../contentextensions/DFABytecodeCompiler.cpp |  5 +-
+ .../DFABytecodeInterpreter.cpp                |  6 ++-
+ .../contentextensions/SerializedNFA.cpp       | 53 ++++++++++++-------
+ 6 files changed, 53 insertions(+), 27 deletions(-)
+
+diff --git a/Source/WebCore/contentextensions/ContentExtensionActions.cpp b/Source/WebCore/contentextensions/ContentExtensionActions.cpp
+index c76d7190..8a613e7a 100644
+--- a/Source/WebCore/contentextensions/ContentExtensionActions.cpp
++++ b/Source/WebCore/contentextensions/ContentExtensionActions.cpp
+@@ -55,7 +55,10 @@ static void append(Vector<uint8_t>& vector, const CString& string)
+ 
+ static size_t deserializeLength(std::span<const uint8_t> span, size_t offset)
+ {
+-    return reinterpretCastSpanStartTo<const uint32_t>(span.subspan(offset));
++    // Copied, not cast: serialized actions are packed (strict-alignment CPUs fault).
++    uint32_t length;
++    memcpySpan(asMutableByteSpan(length), span.subspan(offset, sizeof(length)));
++    return length;
+ }
+ 
+ static String deserializeUTF8String(std::span<const uint8_t> span, size_t offset, size_t length)
+@@ -69,8 +72,8 @@ static void writeLengthToVectorAtOffset(Vector<uint8_t>& vector, size_t offset)
+     auto length = vector.size() - offset;
+     RELEASE_ASSERT(length <= std::numeric_limits<uint32_t>::max());
+     uint32_t integer = length;
+-    RELEASE_ASSERT(!reinterpretCastSpanStartTo<uint32_t>(vector.subspan(offset)));
+-    reinterpretCastSpanStartTo<uint32_t>(vector.mutableSpan().subspan(offset)) = integer;
++    RELEASE_ASSERT(!deserializeLength(vector.span(), offset));
++    memcpySpan(vector.mutableSpan().subspan(offset, sizeof(integer)), asByteSpan(integer));
+ }
+ 
+ Expected<ModifyHeadersAction, std::error_code> ModifyHeadersAction::parse(const JSON::Object& modifyHeaders)
+diff --git a/Source/WebCore/contentextensions/ContentExtensionActions.h b/Source/WebCore/contentextensions/ContentExtensionActions.h
+index b8c7498c..dc339875 100644
+--- a/Source/WebCore/contentextensions/ContentExtensionActions.h
++++ b/Source/WebCore/contentextensions/ContentExtensionActions.h
+@@ -269,7 +269,7 @@ struct ReportIdentifierAction : public ActionWithStringMetadata<ReportIdentifier
+     static ReportIdentifierAction deserialize(std::span<const uint8_t> span)
+     {
+         ReportIdentifierAction value = ActionWithStringMetadata<ReportIdentifierAction>::deserialize(span.subspan(sizeof(identifier)));
+-        value.identifier = reinterpretCastSpanStartTo<double>(span);
++        memcpySpan(asMutableByteSpan(value.identifier), span.first(sizeof(value.identifier)));
+ 
+         return value;
+     }
+diff --git a/Source/WebCore/contentextensions/ContentExtensionStringSerialization.cpp b/Source/WebCore/contentextensions/ContentExtensionStringSerialization.cpp
+index 3ef4dd40..13e51509 100644
+--- a/Source/WebCore/contentextensions/ContentExtensionStringSerialization.cpp
++++ b/Source/WebCore/contentextensions/ContentExtensionStringSerialization.cpp
+@@ -49,7 +49,10 @@ void serializeString(Vector<uint8_t>& actions, const String& string)
+ 
+ size_t stringSerializedLength(std::span<const uint8_t> span)
+ {
+-    return reinterpretCastSpanStartTo<const uint32_t>(span);
++    // Copied, not cast: serialized strings are packed (strict-alignment CPUs fault).
++    uint32_t length;
++    memcpySpan(asMutableByteSpan(length), span.first(sizeof(length)));
++    return length;
+ }
+ 
+ } // namespace WebCore::ContentExtensions
+diff --git a/Source/WebCore/contentextensions/DFABytecodeCompiler.cpp b/Source/WebCore/contentextensions/DFABytecodeCompiler.cpp
+index 1f539029..dbc60f1c 100644
+--- a/Source/WebCore/contentextensions/DFABytecodeCompiler.cpp
++++ b/Source/WebCore/contentextensions/DFABytecodeCompiler.cpp
+@@ -71,8 +71,9 @@ template <typename IntType>
+ void setBits(Vector<DFABytecode>& bytecode, uint32_t index, IntType value)
+ {
+     RELEASE_ASSERT(index + sizeof(IntType) <= bytecode.size());
+-    ASSERT_WITH_MESSAGE(!*reinterpret_cast<IntType*>(&bytecode[index]), "Right now we should only be using setBits to overwrite values that were zero as a placeholder.");
+-    *reinterpret_cast<IntType*>(&bytecode[index]) = value;
++    // Copied, not cast: bytecode is packed, and strict-alignment CPUs (MIPS)
++    // fault on misaligned stores.
++    memcpySpan(bytecode.mutableSpan().subspan(index, sizeof(IntType)), asByteSpan(value));
+ }
+ 
+ static DFABytecodeFlagsSize bytecodeFlagsSize(ResourceFlags flags)
+diff --git a/Source/WebCore/contentextensions/DFABytecodeInterpreter.cpp b/Source/WebCore/contentextensions/DFABytecodeInterpreter.cpp
+index be5c571d..b55bef78 100644
+--- a/Source/WebCore/contentextensions/DFABytecodeInterpreter.cpp
++++ b/Source/WebCore/contentextensions/DFABytecodeInterpreter.cpp
+@@ -37,7 +37,11 @@ namespace WebCore::ContentExtensions {
+ template <typename IntType>
+ static IntType getBits(std::span<const uint8_t> bytecode, uint32_t index)
+ {
+-    return reinterpretCastSpanStartTo<const IntType>(bytecode.subspan(index));
++    // Copied, not cast: bytecode is packed, and strict-alignment CPUs (MIPS)
++    // fault on misaligned loads.
++    IntType value;
++    memcpySpan(asMutableByteSpan(value), bytecode.subspan(index, sizeof(IntType)));
++    return value;
+ }
+ 
+ static uint32_t get24BitsUnsigned(std::span<const uint8_t> bytecode, uint32_t index)
+diff --git a/Source/WebCore/contentextensions/SerializedNFA.cpp b/Source/WebCore/contentextensions/SerializedNFA.cpp
+index e404fe70..61c32fd2 100644
+--- a/Source/WebCore/contentextensions/SerializedNFA.cpp
++++ b/Source/WebCore/contentextensions/SerializedNFA.cpp
+@@ -27,6 +27,7 @@
+ #include "SerializedNFA.h"
+ 
+ #include "NFA.h"
++#include <array>
+ #include <wtf/FileHandle.h>
+ #include <wtf/FileSystem.h>
+ #include <wtf/text/ParsingUtilities.h>
+@@ -36,10 +37,8 @@
+ namespace WebCore {
+ namespace ContentExtensions {
+ 
+-template<typename T>
+-bool writeAllToFile(FileSystem::FileHandle& file, const T& container)
++static bool writeBytesToFile(FileSystem::FileHandle& file, std::span<const uint8_t> bytes)
+ {
+-    auto bytes = spanReinterpretCast<const uint8_t>(container.span());
+     while (!bytes.empty()) {
+         auto written = file.write(bytes);
+         if (!written)
+@@ -49,17 +48,39 @@ bool writeAllToFile(FileSystem::FileHandle& file, const T& container)
+     return true;
+ }
+ 
++// Each array starts at a multiple of its element's alignment, and its offset is
++// returned in `start`: the file is mapped and read in place, and some CPUs
++// (MIPS) fault on misaligned loads, e.g. of the uint64_t actions that follow
++// arrays of uint32_t.
++template<typename T>
++bool writeAllToFile(FileSystem::FileHandle& file, const T& container, size_t& offset, size_t& start)
++{
++    constexpr size_t alignment = alignof(std::remove_cvref_t<decltype(container.span()[0])>);
++    static constexpr std::array<uint8_t, alignment> zeros { };
++    size_t padding = (alignment - offset % alignment) % alignment;
++    if (!writeBytesToFile(file, std::span<const uint8_t>(zeros).first(padding)))
++        return false;
++    offset += padding;
++    start = offset;
++    auto bytes = spanReinterpretCast<const uint8_t>(container.span());
++    if (!writeBytesToFile(file, bytes))
++        return false;
++    offset += bytes.size();
++    return true;
++}
++
+ std::optional<SerializedNFA> SerializedNFA::serialize(NFA&& nfa)
+ {
+     auto [filename, fileHandle] = FileSystem::openTemporaryFile("SerializedNFA"_s);
+     if (!fileHandle)
+         return std::nullopt;
+ 
+-    bool wroteSuccessfully = writeAllToFile(fileHandle, nfa.nodes)
+-        && writeAllToFile(fileHandle, nfa.transitions)
+-        && writeAllToFile(fileHandle, nfa.targets)
+-        && writeAllToFile(fileHandle, nfa.epsilonTransitionsTargets)
+-        && writeAllToFile(fileHandle, nfa.actions);
++    size_t offset = 0, nodesOffset = 0, transitionsOffset = 0, targetsOffset = 0, epsilonTransitionsTargetsOffset = 0, actionsOffset = 0;
++    bool wroteSuccessfully = writeAllToFile(fileHandle, nfa.nodes, offset, nodesOffset)
++        && writeAllToFile(fileHandle, nfa.transitions, offset, transitionsOffset)
++        && writeAllToFile(fileHandle, nfa.targets, offset, targetsOffset)
++        && writeAllToFile(fileHandle, nfa.epsilonTransitionsTargets, offset, epsilonTransitionsTargetsOffset)
++        && writeAllToFile(fileHandle, nfa.actions, offset, actionsOffset);
+     if (!wroteSuccessfully) {
+         fileHandle = { };
+         FileSystem::deleteFile(filename);
+@@ -78,17 +99,11 @@ std::optional<SerializedNFA> SerializedNFA::serialize(NFA&& nfa)
+         nfa.targets.size(),
+         nfa.epsilonTransitionsTargets.size(),
+         nfa.actions.size(),
+-        0,
+-        nfa.nodes.size() * sizeof(nfa.nodes[0]),
+-        nfa.nodes.size() * sizeof(nfa.nodes[0])
+-            + nfa.transitions.size() * sizeof(nfa.transitions[0]),
+-        nfa.nodes.size() * sizeof(nfa.nodes[0])
+-            + nfa.transitions.size() * sizeof(nfa.transitions[0])
+-            + nfa.targets.size() * sizeof(nfa.targets[0]),
+-        nfa.nodes.size() * sizeof(nfa.nodes[0])
+-            + nfa.transitions.size() * sizeof(nfa.transitions[0])
+-            + nfa.targets.size() * sizeof(nfa.targets[0])
+-            + nfa.epsilonTransitionsTargets.size() * sizeof(nfa.epsilonTransitionsTargets[0])
++        nodesOffset,
++        transitionsOffset,
++        targetsOffset,
++        epsilonTransitionsTargetsOffset,
++        actionsOffset
+     };
+ 
+     nfa.clear();
+-- 
+2.54.0 (Apple Git-157)
+
