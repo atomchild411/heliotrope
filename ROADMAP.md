@@ -32,6 +32,17 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
 10. **Network process (~50 MB)**: profile (OpenSSL certificate store,
     libsoup) for easy wins.
 
+## Measured (2026-09-28, atom, two runs each)
+
+- MIPS IV + the aligned-block allocator vs MIPS III: no difference beyond run
+  noise (Wikipedia ~57 s / 97 MB, GitHub ~220 s / 165 MB, Google ~80 s /
+  113 MB for the Web process). MIPS IV stays the target (user: MIPS III not
+  a concern). The memalign "2x" was untouched padding, never resident.
+- JSC heap tuning (8 MB threshold, slower growth): about -4 MB on GitHub.
+- Next: the lean build (lean.sh: -Os, -fomit-frame-pointer, --icf=safe, and
+  geolocation, notifications, pdf.js, smooth scrolling, touch, MHTML,
+  offscreen canvas, image-diff off), with blocking off and on.
+
 ## Decisions pending
 
 - **Replace softpipe** (compositing now runs on Mesa's software rasterizer,
