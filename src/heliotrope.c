@@ -17,6 +17,12 @@
  * (default 5) have passed; -q then quits. HELIOTROPE_HOME sets Home (default:
  * the first page).
  *
+ * Blocking: third-party loads from ad and tracking servers are blocked (Peter
+ * Lowe's list, https://pgl.yoyo.org/adservers/, compiled by WebKit's content
+ * blocker on first use and cached). The shield button turns blocking off for
+ * the current site, the JS button JavaScript; both are remembered per site in
+ * ~/.config/heliotrope/sites. HELIOTROPE_BLOCKLIST names another rule list.
+ *
  * Memory: every site shares one Web process (HELIOTROPE_SITE_ISOLATION=1
  * gives each site its own, as WebKit does by default), caches are sized for
  * documents rather than a big browser, and WebKit is asked to shed caches
@@ -35,6 +41,7 @@
 #include <X11/extensions/XShm.h>
 
 #include <glib-unix.h>
+#include <glib/gstdio.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,13 +50,20 @@
 #include <sys/resource.h>
 #include <sys/shm.h>
 
+#ifndef BLOCKLIST_PATH
+#define BLOCKLIST_PATH "/opt/pkgsrc/share/heliotrope/blocklist.json"
+#endif
+
 #define BAR_HEIGHT 30           /* toolbar */
 #define SCROLLBAR_WIDTH 14
 #define BUTTON_WIDTH 28
 #define BUTTON_HEIGHT 24
 #define MIN_THUMB 24
 
-enum { BUTTON_BACK, BUTTON_FORWARD, BUTTON_RELOAD, BUTTON_HOME, N_BUTTONS };
+enum { BUTTON_BACK, BUTTON_FORWARD, BUTTON_RELOAD, BUTTON_HOME, BUTTON_JS, BUTTON_BLOCK, N_BUTTONS };
+
+/* per-site choices, remembered in ~/.config/heliotrope/sites */
+enum { SITE_NO_JS = 1, SITE_NO_BLOCKING = 2 };
 
 typedef struct {
     Display *dpy;
@@ -93,6 +107,16 @@ typedef struct {
     gboolean scroll_pending, scroll_queued;
 
     char *status;               /* the link under the pointer */
+
+    /* blocking and per-site choices */
+    WebKitUserContentManager *content_manager;
+    WebKitUserContentFilterStore *filter_store;
+    WebKitUserContentFilter *filter;    /* the compiled block list, once ready */
+    gboolean filter_active;             /* added to content_manager */
+    char *filter_id;
+    char *pending_url;                  /* the first page, waiting for the filter */
+    GHashTable *sites;                  /* host -> SITE_* flags */
+    char *sites_path;
 
     const char *shot_path;
     int shot_delay;
@@ -159,6 +183,8 @@ static void bevel(App *app, const XRectangle *r, gboolean sunken)
     XDrawLine(app->dpy, app->win, app->gc, r->x + r->width - 1, r->y, r->x + r->width - 1, r->y + r->height - 1);
 }
 
+static unsigned current_site_flags(App *app);
+
 static void draw_icon(App *app, int which, const XRectangle *r, gboolean enabled)
 {
     int cx = r->x + r->width / 2, cy = r->y + r->height / 2;
@@ -207,7 +233,52 @@ static void draw_icon(App *app, int which, const XRectangle *r, gboolean enabled
         XSetForeground(app->dpy, app->gc, app->bar_bg);
         XFillRectangle(app->dpy, app->win, app->gc, cx - 2, cy + 2, 4, 5);
         break;
+    case BUTTON_JS: {
+        gboolean on = !(current_site_flags(app) & SITE_NO_JS);
+        XSetForeground(app->dpy, app->gc, on ? app->ink : app->ink_disabled);
+        if (app->font)
+            XDrawString(app->dpy, app->win, app->gc, cx - XTextWidth(app->font, "JS", 2) / 2,
+                cy + (app->font->ascent - app->font->descent) / 2, "JS", 2);
+        if (!on) {
+            XSetForeground(app->dpy, app->gc, app->ink);
+            XDrawLine(app->dpy, app->win, app->gc, cx - 8, cy + 7, cx + 8, cy - 7);
+        }
+        break;
     }
+    case BUTTON_BLOCK: {
+        gboolean on = app->filter && !(current_site_flags(app) & SITE_NO_BLOCKING);
+        p[0].x = cx - 7; p[0].y = cy - 7;
+        p[1].x = cx + 7; p[1].y = cy - 7;
+        p[2].x = cx + 7; p[2].y = cy;
+        p[3].x = cx; p[3].y = cy + 8;
+        p[4].x = cx - 7; p[4].y = cy;
+        p[5] = p[0];
+        if (on) {
+            XSetForeground(app->dpy, app->gc, app->progress);
+            XFillPolygon(app->dpy, app->win, app->gc, p, 5, Convex, CoordModeOrigin);
+        } else {
+            XSetForeground(app->dpy, app->gc, app->ink_disabled);
+            XDrawLines(app->dpy, app->win, app->gc, p, 6, CoordModeOrigin);
+            XDrawLine(app->dpy, app->win, app->gc, cx - 8, cy + 7, cx + 8, cy - 7);
+        }
+        break;
+    }
+    }
+}
+
+/* the SITE_* flags of the page being shown */
+static unsigned current_site_flags(App *app)
+{
+    const char *uri = webkit_web_view_get_uri(app->web_view);
+    GUri *parsed = uri ? g_uri_parse(uri, G_URI_FLAGS_NONE, NULL) : NULL;
+    unsigned flags = 0;
+    if (parsed) {
+        const char *host = g_uri_get_host(parsed);
+        if (host)
+            flags = GPOINTER_TO_UINT(g_hash_table_lookup(app->sites, host));
+        g_uri_unref(parsed);
+    }
+    return flags;
 }
 
 static gboolean button_enabled(App *app, int i)
@@ -597,9 +668,13 @@ static gboolean take_shot(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+static void apply_site_choices(App *app);
+
 static void load_changed(WebKitWebView *web_view, WebKitLoadEvent event, App *app)
 {
     (void)web_view;
+    if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_REDIRECTED)
+        apply_site_choices(app);
     if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_COMMITTED) {
         app->scroll_y = 0;
         app->scroll_height = 0;
@@ -885,6 +960,173 @@ static void send(App *app, WPEEvent *event)
     wpe_event_unref(event);
 }
 
+/* --- per-site choices and the block list ------------------------------------ */
+
+static void load_sites(App *app)
+{
+    char *text = NULL, **lines;
+    int i;
+    app->sites = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    app->sites_path = g_build_filename(g_get_user_config_dir(), "heliotrope", "sites", NULL);
+    if (!g_file_get_contents(app->sites_path, &text, NULL, NULL))
+        return;
+    lines = g_strsplit(text, "\n", -1);
+    for (i = 0; lines[i]; i++) {
+        char **w = g_strsplit_set(g_strstrip(lines[i]), " \t", -1);
+        unsigned flags = 0;
+        int j;
+        if (!w[0] || !*w[0] || w[0][0] == '#') {
+            g_strfreev(w);
+            continue;
+        }
+        for (j = 1; w[j]; j++) {
+            if (!strcmp(w[j], "nojs"))
+                flags |= SITE_NO_JS;
+            else if (!strcmp(w[j], "noblock"))
+                flags |= SITE_NO_BLOCKING;
+        }
+        if (flags)
+            g_hash_table_insert(app->sites, g_strdup(w[0]), GUINT_TO_POINTER(flags));
+        g_strfreev(w);
+    }
+    g_strfreev(lines);
+    g_free(text);
+}
+
+static void save_sites(App *app)
+{
+    GString *out = g_string_new("# heliotrope per-site choices: host nojs|noblock\n");
+    GHashTableIter it;
+    gpointer key, value;
+    char *dir = g_path_get_dirname(app->sites_path);
+    g_hash_table_iter_init(&it, app->sites);
+    while (g_hash_table_iter_next(&it, &key, &value)) {
+        unsigned flags = GPOINTER_TO_UINT(value);
+        g_string_append_printf(out, "%s%s%s\n", (char *)key, flags & SITE_NO_JS ? " nojs" : "",
+            flags & SITE_NO_BLOCKING ? " noblock" : "");
+    }
+    g_mkdir_with_parents(dir, 0755);
+    g_file_set_contents(app->sites_path, out->str, (gssize)out->len, NULL);
+    g_free(dir);
+    g_string_free(out, TRUE);
+}
+
+/* Apply the current site's choices before its document and resources load. */
+static void apply_site_choices(App *app)
+{
+    unsigned flags = current_site_flags(app);
+    gboolean block = app->filter && !(flags & SITE_NO_BLOCKING);
+    webkit_settings_set_enable_javascript(webkit_web_view_get_settings(app->web_view), !(flags & SITE_NO_JS));
+    if (block && !app->filter_active)
+        webkit_user_content_manager_add_filter(app->content_manager, app->filter);
+    else if (!block && app->filter_active)
+        webkit_user_content_manager_remove_filter(app->content_manager, app->filter);
+    app->filter_active = block;
+}
+
+static void toggle_site(App *app, unsigned flag)
+{
+    const char *uri = webkit_web_view_get_uri(app->web_view);
+    GUri *parsed = uri ? g_uri_parse(uri, G_URI_FLAGS_NONE, NULL) : NULL;
+    const char *host = parsed ? g_uri_get_host(parsed) : NULL;
+    if (host && *host) {
+        unsigned flags = GPOINTER_TO_UINT(g_hash_table_lookup(app->sites, host)) ^ flag;
+        if (flags)
+            g_hash_table_insert(app->sites, g_strdup(host), GUINT_TO_POINTER(flags));
+        else
+            g_hash_table_remove(app->sites, host);
+        save_sites(app);
+        apply_site_choices(app);
+        webkit_web_view_reload(app->web_view);
+    }
+    if (parsed)
+        g_uri_unref(parsed);
+}
+
+static void load_pending_page(App *app)
+{
+    if (app->pending_url) {
+        load_address(app, app->pending_url);
+        g_clear_pointer(&app->pending_url, g_free);
+    }
+}
+
+static void filter_ready(App *app, WebKitUserContentFilter *filter, gint64 started)
+{
+    app->filter = filter;
+    g_printerr("heliotrope: block list ready (%.1f s)\n", (g_get_monotonic_time() - started) / 1e6);
+    g_clear_pointer(&app->status, g_free);
+    load_pending_page(app);
+    draw_bar(app);
+}
+
+typedef struct { App *app; gint64 started; } FilterJob;
+
+static void filter_saved(GObject *store, GAsyncResult *result, gpointer data)
+{
+    FilterJob *job = data;
+    GError *error = NULL;
+    WebKitUserContentFilter *filter = webkit_user_content_filter_store_save_finish(WEBKIT_USER_CONTENT_FILTER_STORE(store), result, &error);
+    if (filter)
+        filter_ready(job->app, filter, job->started);
+    else {
+        g_printerr("heliotrope: cannot compile the block list: %s\n", error->message);
+        g_error_free(error);
+        g_clear_pointer(&job->app->status, g_free);
+        load_pending_page(job->app);
+    }
+    g_free(job);
+}
+
+static void filter_loaded(GObject *store, GAsyncResult *result, gpointer data)
+{
+    FilterJob *job = data;
+    App *app = job->app;
+    WebKitUserContentFilter *filter = webkit_user_content_filter_store_load_finish(WEBKIT_USER_CONTENT_FILTER_STORE(store), result, NULL);
+    const char *path = getenv("HELIOTROPE_BLOCKLIST") ? getenv("HELIOTROPE_BLOCKLIST") : BLOCKLIST_PATH;
+    char *json = NULL;
+    gsize length;
+    if (filter) {
+        filter_ready(app, filter, job->started);
+        g_free(job);
+        return;
+    }
+    /* Not compiled yet (or the list changed): compile it now, once. */
+    if (!g_file_get_contents(path, &json, &length, NULL)) {
+        g_clear_pointer(&app->status, g_free);
+        load_pending_page(app);
+        g_free(job);
+        return;
+    }
+    g_free(app->status);
+    app->status = g_strdup("Preparing the block list (first run only)...");
+    draw_page(app);
+    XFlush(app->dpy);
+    webkit_user_content_filter_store_save(app->filter_store, app->filter_id, g_bytes_new_take(json, length), NULL, filter_saved, job);
+}
+
+/* The compiled list is stored under an identifier made from the rule file's
+ * size and time, so a new list is compiled once and the old one replaced. */
+static void start_block_list(App *app)
+{
+    const char *path = getenv("HELIOTROPE_BLOCKLIST") ? getenv("HELIOTROPE_BLOCKLIST") : BLOCKLIST_PATH;
+    GStatBuf st;
+    FilterJob *job;
+    char *dir;
+    if (!*path || g_stat(path, &st) != 0) {
+        load_pending_page(app);
+        return;
+    }
+    dir = g_build_filename(g_get_user_cache_dir(), "heliotrope", "content-filters", NULL);
+    app->filter_store = webkit_user_content_filter_store_new(dir);
+    g_free(dir);
+    app->filter_id = g_strdup_printf("blocklist-%ld-%ld", (long)st.st_size, (long)st.st_mtime);
+    job = g_new0(FilterJob, 1);
+    job->app = app;
+    job->started = g_get_monotonic_time();
+    webkit_user_content_filter_store_load(app->filter_store, app->filter_id, NULL, filter_loaded, job);
+}
+
 static void press_button(App *app, int i)
 {
     switch (i) {
@@ -902,6 +1144,12 @@ static void press_button(App *app, int i)
         break;
     case BUTTON_HOME:
         load_address(app, app->home);
+        break;
+    case BUTTON_JS:
+        toggle_site(app, SITE_NO_JS);
+        break;
+    case BUTTON_BLOCK:
+        toggle_site(app, SITE_NO_BLOCKING);
         break;
     }
 }
@@ -1270,6 +1518,7 @@ int main(int argc, char **argv)
         guint mb = limit && atoi(limit) > 0 ? (guint)atoi(limit) : 256;
         WebKitMemoryPressureSettings *pressure = webkit_memory_pressure_settings_new();
         WebKitWebContext *context;
+        app.content_manager = webkit_user_content_manager_new();
         webkit_memory_pressure_settings_set_memory_limit(pressure, mb);
         webkit_memory_pressure_settings_set_conservative_threshold(pressure, 0.33);
         webkit_memory_pressure_settings_set_strict_threshold(pressure, 0.5);
@@ -1281,7 +1530,7 @@ int main(int argc, char **argv)
         webkit_memory_pressure_settings_free(pressure);
         webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_DOCUMENT_BROWSER);
         app.web_view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW, "display", display,
-            "web-context", context, NULL));
+            "web-context", context, "user-content-manager", app.content_manager, NULL));
         g_object_unref(context);
     }
     g_object_unref(display);
@@ -1299,7 +1548,9 @@ int main(int argc, char **argv)
     wpe_view_focus_in(app.view);
 
     g_unix_fd_add(ConnectionNumber(app.dpy), G_IO_IN, x_ready, &app);
-    load_address(&app, url);
+    load_sites(&app);
+    app.pending_url = g_strdup(url);
+    start_block_list(&app);
 
     app.loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(app.loop);

@@ -15,7 +15,7 @@ STRIP=$WS/scratch/llvm-irix/cross21/bin/llvm-strip
 
 rm -rf "$STAGE"
 # cmake --install never builds (ninja install would rebuild at full parallelism).
-DESTDIR=$STAGE cmake --install "$HERE/wpe-build" >/dev/null
+DESTDIR=$STAGE cmake --install "$HERE/${BUILD:-wpe-build}" >/dev/null
 P=$STAGE/opt/pkgsrc
 # Strip the libraries and programs (they are huge with symbols).
 find "$P/lib" "$P/libexec" "$P/bin" -type f 2>/dev/null | while read f; do
@@ -26,11 +26,13 @@ done
 I=$S/opt/pkgsrc/include
 PKGCONFIG_CFLAGS="-I$P/include/wpe-webkit-2.0 -I$P/include/wpe-webkit-2.0/wpe-platform -I$I/glib-2.0 -I$S/opt/pkgsrc/lib/glib-2.0/include -I$I/libsoup-3.0 -I$I"
 mkdir -p "$P/bin"
-"$CC" -target mips64-sgi-irix6.5 --sysroot="$S" -O2 -Wall -Wextra -Wno-unused-parameter $PKGCONFIG_CFLAGS \
+"$CC" -target mips64-sgi-irix6.5 -march=mips4 -mtune=r10000 --sysroot="$S" -O2 -Wall -Wextra -Wno-unused-parameter $PKGCONFIG_CFLAGS \
     -o "$P/bin/heliotrope" "$WS/code/heliotrope/src/heliotrope.c" \
     -L"$P/lib" -L"$S/opt/pkgsrc/lib" -Wl,-rpath,/opt/pkgsrc/lib \
     -lWPEWebKit-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lXext -lX11
 "$STRIP" "$P/bin/heliotrope"
+mkdir -p "$P/share/heliotrope"
+cp "$WS/code/heliotrope/blocklist/blocklist.json" "$WS/code/heliotrope/blocklist/README" "$P/share/heliotrope/"
 
 cd "$P"
 find . \( -type f -o -type l \) | sed 's|^\./||' | sort > "$HERE/PLIST"

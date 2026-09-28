@@ -1,16 +1,19 @@
 #!/bin/sh
 # Spike: cross-configure WPE WebKit 2.52.6 for IRIX 6.5 n32 (Cairo, CLoop,
 # WPEPlatform headless + our own X11 view later). Run from scratch/wpe.
+#   BUILD=wpe-build CPU=mips3 ./configure-wpe.sh   (CPU=r10000 for MIPS IV)
 set -e
+BUILD=${BUILD:-wpe-build}
+CPU=${CPU:-mips3}
 WS=/Volumes/portable/workspace-claude/IRIX
 S=$WS/scratch/pkgsrc-irix/destdir
 export PATH=$WS/scratch/pkgsrc-irix/host/bin:$PATH
 export PKG_CONFIG_LIBDIR=$S/opt/pkgsrc/lib/pkgconfig:$S/opt/pkgsrc/share/pkgconfig
 export PKG_CONFIG_SYSROOT_DIR=$S
 unset PKG_CONFIG_FDO_SYSROOT_RULES
-cmake -G Ninja -S wpewebkit-2.52.6 -B wpe-build \
+cmake -G Ninja -S wpewebkit-2.52.6 -B $BUILD \
   -DCMAKE_TOOLCHAIN_FILE=$WS/code/llvm-wt/iris-main/llvm/cmake/platforms/IRIX.cmake \
-  -DIRIX_SYSROOT=$S -DIRIX_TOOLCHAIN=$WS/scratch/llvm-irix/cross21 -DIRIX_TUNE=r10000 \
+  -DIRIX_SYSROOT=$S -DIRIX_TOOLCHAIN=$WS/scratch/llvm-irix/cross21 -DIRIX_CPU=$CPU -DIRIX_TUNE=r10000 \
   -DCMAKE_PREFIX_PATH=/opt/pkgsrc -DCMAKE_INSTALL_PREFIX=/opt/pkgsrc -DCMAKE_BUILD_TYPE=Release \
   -DPORT=WPE -DUSE_SKIA=OFF -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON -DUSE_SYSTEM_MALLOC=ON \
   -DENABLE_WEBASSEMBLY=OFF -DENABLE_SAMPLING_PROFILER=OFF -DDEVELOPER_MODE=OFF \

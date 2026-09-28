@@ -4,4 +4,4 @@
 # compile flags (to fix properly in the pkgsrc recipe).
 S=/Volumes/portable/workspace-claude/IRIX/scratch/pkgsrc-irix/destdir
 export CPATH=$S/opt/pkgsrc/include/gio-unix-2.0
-exec ninja -C /Volumes/portable/workspace-claude/IRIX/scratch/wpe/wpe-build -k 200 -j5 "$@"
+exec ninja -C /Volumes/portable/workspace-claude/IRIX/scratch/wpe/${BUILD:-wpe-build} -k 200 -j5 "$@"
