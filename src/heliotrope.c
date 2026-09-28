@@ -187,6 +187,13 @@ static void bevel(App *app, const XRectangle *r, gboolean sunken)
 
 static unsigned current_site_flags(App *app);
 
+/* An environment switch is on when set to anything but "" or "0". */
+static gboolean env_on(const char *name)
+{
+    const char *v = getenv(name);
+    return v && *v && strcmp(v, "0");
+}
+
 static void draw_icon(App *app, int which, const XRectangle *r, gboolean enabled)
 {
     int cx = r->x + r->width / 2, cy = r->y + r->height / 2;
@@ -1538,7 +1545,7 @@ int main(int argc, char **argv)
         webkit_network_session_set_memory_pressure_settings(pressure);
         context = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
             "memory-pressure-settings", pressure,
-            "process-swap-on-cross-site-navigation-enabled", getenv("HELIOTROPE_SITE_ISOLATION") != NULL,
+            "process-swap-on-cross-site-navigation-enabled", env_on("HELIOTROPE_SITE_ISOLATION"),
             NULL));
         webkit_memory_pressure_settings_free(pressure);
         webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_DOCUMENT_BROWSER);
@@ -1549,7 +1556,7 @@ int main(int argc, char **argv)
     g_object_unref(display);
     /* HELIOTROPE_CONSOLE=1: the page's console messages (including what the
      * content blocker stopped) go to stdout, for testing. */
-    if (getenv("HELIOTROPE_CONSOLE"))
+    if (env_on("HELIOTROPE_CONSOLE"))
         webkit_settings_set_enable_write_console_messages_to_stdout(webkit_web_view_get_settings(app.web_view), TRUE);
     app.view = webkit_web_view_get_wpe_view(app.web_view);
     wpe_toplevel_resize(wpe_view_get_toplevel(app.view), page_width(&app), page_height(&app));
