@@ -1,7 +1,7 @@
 /*
  * Heliotrope -- a small web browser for IRIX, on WPE WebKit.
  *
- *   heliotrope [-g WIDTHxHEIGHT] [-o shot.ppm] [-s seconds] [-q] [URL]
+ *   heliotrope [-g WIDTHxHEIGHT[+X+Y]] [-o shot.ppm] [-s seconds] [-q] [URL]
  *
  * WebKit renders into WPE's headless platform (EGL on Mesa's software
  * rasterizer, frames in shared memory); each frame is copied into a 24-bit
@@ -78,6 +78,8 @@ typedef struct {
         selection, progress, trough, thumb, status_bg;
     int rshift, gshift, bshift; /* of the visual's masks */
     int width, height;          /* of the window */
+    int x, y;                   /* where -g asked for it */
+    gboolean positioned;
     Atom wm_delete, clipboard, utf8_string, selection_property;
 
     XImage *image;              /* the last frame, in the visual's format */
@@ -1441,10 +1443,21 @@ static gboolean open_window(App *app)
     attrs.border_pixel = 0;
     attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask
         | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | FocusChangeMask;
-    app->win = XCreateWindow(app->dpy, RootWindow(app->dpy, screen), 0, 0,
+    app->win = XCreateWindow(app->dpy, RootWindow(app->dpy, screen), app->x, app->y,
         app->width, app->height, 0, app->depth, InputOutput, app->visual,
         CWColormap | CWBackPixel | CWBorderPixel | CWEventMask, &attrs);
     XStoreName(app->dpy, app->win, "Heliotrope");
+    if (app->positioned) {
+        /* -g WxH+X+Y: a position the user chose, which the window manager keeps */
+        XSizeHints hints;
+        memset(&hints, 0, sizeof hints);
+        hints.flags = USPosition | USSize;
+        hints.x = app->x;
+        hints.y = app->y;
+        hints.width = app->width;
+        hints.height = app->height;
+        XSetWMNormalHints(app->dpy, app->win, &hints);
+    }
     app->wm_delete = XInternAtom(app->dpy, "WM_DELETE_WINDOW", False);
     app->clipboard = XInternAtom(app->dpy, "CLIPBOARD", False);
     app->selection_property = XInternAtom(app->dpy, "HELIOTROPE_SELECTION", False);
@@ -1492,7 +1505,7 @@ int main(int argc, char **argv)
     app.pressed_button = -1;
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-g") && i + 1 < argc)
-            sscanf(argv[++i], "%dx%d", &app.width, &app.height);
+            app.positioned = sscanf(argv[++i], "%dx%d+%d+%d", &app.width, &app.height, &app.x, &app.y) == 4;
         else if (!strcmp(argv[i], "-o") && i + 1 < argc)
             app.shot_path = argv[++i];
         else if (!strcmp(argv[i], "-s") && i + 1 < argc)
@@ -1500,7 +1513,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-q"))
             app.quit_after_shot = TRUE;
         else if (argv[i][0] == '-') {
-            g_printerr("usage: heliotrope [-g WIDTHxHEIGHT] [-o shot.ppm] [-s seconds] [-q] [URL]\n");
+            g_printerr("usage: heliotrope [-g WIDTHxHEIGHT[+X+Y]] [-o shot.ppm] [-s seconds] [-q] [URL]\n");
             return 2;
         } else
             url = argv[i];
