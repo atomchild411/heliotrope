@@ -646,6 +646,26 @@ static void state_changed(GObject *object, GParamSpec *pspec, App *app)
     XFlush(app->dpy);
 }
 
+/* The Web process died (a crash, or killed for memory): reload once; if the page
+ * kills it again within a minute, show why instead of looping. */
+static void web_process_terminated(WebKitWebView *web_view, WebKitWebProcessTerminationReason reason, App *app)
+{
+    static gint64 last;
+    gint64 now = g_get_monotonic_time();
+    const char *why = reason == WEBKIT_WEB_PROCESS_EXCEEDED_MEMORY_LIMIT ? "it used too much memory"
+        : reason == WEBKIT_WEB_PROCESS_CRASHED ? "it crashed" : "it was terminated";
+    (void)app;
+    g_printerr("heliotrope: the Web process ended (%s)\n", why);
+    if (last && now - last < 60 * G_USEC_PER_SEC) {
+        char *html = g_strdup_printf("<body style='font-family:sans-serif;margin:3em'><h2>This page stopped</h2>"
+            "<p>The page's process ended because %s, twice within a minute.</p></body>", why);
+        webkit_web_view_load_alternate_html(web_view, html, webkit_web_view_get_uri(web_view), NULL);
+        g_free(html);
+    } else
+        webkit_web_view_reload(web_view);
+    last = now;
+}
+
 static void set_cursor(App *app, Cursor c)
 {
     if (c != app->current_cursor) {
@@ -1275,6 +1295,7 @@ int main(int argc, char **argv)
     g_signal_connect(app.web_view, "notify::is-loading", G_CALLBACK(state_changed), &app);
     g_signal_connect(app.web_view, "notify::uri", G_CALLBACK(state_changed), &app);
     g_signal_connect(app.web_view, "mouse-target-changed", G_CALLBACK(mouse_target_changed), &app);
+    g_signal_connect(app.web_view, "web-process-terminated", G_CALLBACK(web_process_terminated), &app);
     wpe_view_focus_in(app.view);
 
     g_unix_fd_add(ConnectionNumber(app.dpy), G_IO_IN, x_ready, &app);

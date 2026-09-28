@@ -1,0 +1,150 @@
+From 0d1f636ed522c2926803416f3ec44140bef82a66 Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 11:43:45 -0800
+Subject: [PATCH] IRIX: IPC fixes (descriptor leaks, full datagram buffers,
+ orphans)
+
+- Spawn auxiliary processes without G_SUBPROCESS_FLAGS_INHERIT_FDS on IRIX:
+  it has neither SOCK_CLOEXEC nor MSG_CMSG_CLOEXEC, so descriptors made or
+  received on other threads are briefly inheritable, and a leaked one kept a
+  child's connection open after the UI process exited.
+- Shared memory files get FD_CLOEXEC.
+- Datagram socketpairs (our SEQPACKET stand-in) get 256 KB buffers instead
+  of 16 KB, and ENOBUFS (full peer buffer; poll() still says writable) is
+  retried after 2 ms instead of dropping the message.
+- Auxiliary processes ask for SIGHUP when the UI process exits
+  (prctl(PR_TERMCHILD)).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../WebCore/platform/unix/SharedMemoryUnix.cpp |  6 +++++-
+ .../Platform/IPC/glib/ConnectionGLib.cpp       | 18 ++++++++++++++++++
+ .../Platform/IPC/unix/IPCUtilitiesUnix.cpp     |  9 +++++++++
+ .../Shared/unix/AuxiliaryProcessMain.cpp       |  9 +++++++++
+ .../Launcher/glib/ProcessLauncherGLib.cpp      |  8 ++++++++
+ 5 files changed, 49 insertions(+), 1 deletion(-)
+
+diff --git a/Source/WebCore/platform/unix/SharedMemoryUnix.cpp b/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
+index 425da6e7..3f318186 100644
+--- a/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
++++ b/Source/WebCore/platform/unix/SharedMemoryUnix.cpp
+@@ -117,8 +117,12 @@ static UnixFileDescriptor createSharedMemory()
+         } while (fileDescriptor == -1 && errno == EINTR);
+     }
+ 
+-    if (fileDescriptor != -1)
++    if (fileDescriptor != -1) {
+         shm_unlink(tempName.data());
++#if OS(IRIX)
++        fcntl(fileDescriptor, F_SETFD, FD_CLOEXEC);
++#endif
++    }
+ #endif
+ 
+     return UnixFileDescriptor { fileDescriptor, UnixFileDescriptor::Adopt };
+diff --git a/Source/WebKit/Platform/IPC/glib/ConnectionGLib.cpp b/Source/WebKit/Platform/IPC/glib/ConnectionGLib.cpp
+index 54e1532f..d4332db8 100644
+--- a/Source/WebKit/Platform/IPC/glib/ConnectionGLib.cpp
++++ b/Source/WebKit/Platform/IPC/glib/ConnectionGLib.cpp
+@@ -33,6 +33,7 @@
+ #include <gio/gio.h>
+ #include <gio/gunixconnection.h>
+ #include <gio/gunixfdmessage.h>
++#include <errno.h>
+ #include <sys/socket.h>
+ #include <wtf/StdLibExtras.h>
+ #include <wtf/UniStdExtras.h>
+@@ -455,6 +456,23 @@ bool Connection::sendOutputMessage(UnixMessage&& outputMessage)
+         return false;
+     }
+ 
++#if OS(IRIX)
++    // Our IRIX connections are datagram sockets (no SOCK_SEQPACKET there). When the
++    // peer's receive buffer is full, sending fails with ENOBUFS rather than EAGAIN,
++    // and poll() still reports the socket writable: try again shortly.
++    if (error->domain == G_IO_ERROR && error->code == g_io_error_from_errno(ENOBUFS)) {
++        m_hasPendingOutputMessage = true;
++        m_connectionQueue->dispatchAfter(2_ms, [this, protectedThis = Ref { *this }, message = WTF::move(outputMessage)]() mutable {
++            m_hasPendingOutputMessage = false;
++            if (m_isConnected) {
++                if (sendOutputMessage(WTF::move(message)))
++                    sendOutgoingMessages();
++            }
++        });
++        return false;
++    }
++#endif
++
+     if (m_isConnected)
+         RELEASE_LOG_ERROR(IPC, "Error sending IPC message on socket %d in process %d: %s", g_socket_get_fd(m_socket.get()), getpid(), error->message);
+     return false;
+diff --git a/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp b/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
+index 95b905e9..c559d986 100644
+--- a/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
++++ b/Source/WebKit/Platform/IPC/unix/IPCUtilitiesUnix.cpp
+@@ -58,6 +58,15 @@ SocketPair createPlatformConnection(int socketType, unsigned options)
+ 
+     RELEASE_ASSERT(socketpair(AF_UNIX, socketType, 0, sockets.data()) != -1);
+ 
++#if OS(IRIX)
++    // Datagram buffers default to 16 KB (3 messages of 4 KB): make room for bursts.
++    for (int socket : sockets) {
++        int size = 256 * 1024;
++        setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
++        setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
++    }
++#endif
++
+     if (options & SetCloexecOnServer)
+         RELEASE_ASSERT(setCloseOnExec(sockets[1]));
+     if (options & SetCloexecOnClient)
+diff --git a/Source/WebKit/Shared/unix/AuxiliaryProcessMain.cpp b/Source/WebKit/Shared/unix/AuxiliaryProcessMain.cpp
+index e123fe47..835ef640 100644
+--- a/Source/WebKit/Shared/unix/AuxiliaryProcessMain.cpp
++++ b/Source/WebKit/Shared/unix/AuxiliaryProcessMain.cpp
+@@ -42,6 +42,10 @@
+ #include <glib-unix.h>
+ #endif
+ 
++#if OS(IRIX)
++#include <sys/prctl.h>
++#endif
++
+ #if ENABLE(LLVM_PROFILE_GENERATION)
+ __attribute__((weak)) extern "C" int __llvm_profile_dump(void);
+ #endif
+@@ -50,6 +54,11 @@ namespace WebKit {
+ 
+ AuxiliaryProcessMainCommon::AuxiliaryProcessMainCommon()
+ {
++#if OS(IRIX)
++    // Get SIGHUP when the UI process exits, however it exits, so that no Web or
++    // network process outlives it waiting on a connection nobody will close.
++    prctl(PR_TERMCHILD);
++#endif
+ #if ENABLE(BREAKPAD)
+     installBreakpadExceptionHandler();
+ #endif
+diff --git a/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp b/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp
+index b78585e8..b99ea328 100644
+--- a/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp
++++ b/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp
+@@ -194,7 +194,15 @@ void ProcessLauncher::launchProcess()
+     // must not use a child setup fuction.
+     //
+     // Please keep this comment in sync with the duplicate comment in XDGDBusProxy::launch.
++#if OS(IRIX)
++    // IRIX has neither SOCK_CLOEXEC nor MSG_CMSG_CLOEXEC, so descriptors made or
++    // received on other threads are briefly inheritable, and one leaked into a
++    // child keeps a connection open after its peer exits (children then never see
++    // the UI process go). Let GLib close everything but stdio and the IPC socket.
++    GRefPtr<GSubprocessLauncher> launcher = adoptGRef(g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_NONE));
++#else
+     GRefPtr<GSubprocessLauncher> launcher = adoptGRef(g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_INHERIT_FDS));
++#endif
+     int webkitClientSocketValue = webkitSocketPair.client.release();
+     g_subprocess_launcher_take_fd(launcher.get(), webkitClientSocketValue, webkitClientSocketValue);
+ 
+-- 
+2.54.0 (Apple Git-157)
+
