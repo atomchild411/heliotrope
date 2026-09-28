@@ -1,0 +1,18 @@
+m3a-wiki: loaded after ~60s, measured 30s later
+  heliotrop          resident   35920  private    9344  heap     176  webkit   4224  other    4944
+  WPENetwor          resident   48256  private   25312  heap    8256  webkit   9552  other    7504
+  WPEWebPro          resident  132560  private  100992  heap   27696  webkit  41920  other   31376
+CONSOLE NETWORK INFO Successfully preconnected to https://thumb.wikimedia.org/
+m3a-github: loaded after ~210s, measured 30s later
+  heliotrop          resident   35920  private    9328  heap     176  webkit   4272  other    4880
+  WPENetwor          resident   45424  private   21360  heap    3152  webkit   9648  other    8560
+  WPEWebPro          resident  201680  private  168992  heap   90432  webkit  45504  other   33056
+CONSOLE SECURITY ERROR Unrecognized Content-Security-Policy directive 'manifest-src'.
+
+CONSOLE NETWORK INFO Successfully preconnected to https://avatars.githubusercontent.com/
+CONSOLE NETWORK INFO Successfully preconnected to https://github.githubassets.com/
+m3a-google: loaded after ~70s, measured 30s later
+  heliotrop          resident   36144  private    9328  heap     176  webkit   4240  other    4912
+  WPEWebPro          resident  147792  private  115904  heap   46416  webkit  44544  other   24944
+  WPENetwor          resident   42816  private   19664  heap    2464  webkit   9536  other    7664
+PHASE-DONE

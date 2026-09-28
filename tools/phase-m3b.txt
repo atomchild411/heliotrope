@@ -1,0 +1,19 @@
+m3b-wiki: loaded after ~55s, measured 30s later
+  heliotrop          resident   35920  private    9344  heap     176  webkit   4224  other    4944
+  WPEWebPro          resident  131968  private  100400  heap   27728  webkit  41520  other   31152
+  WPENetwor          resident   47232  private   24272  heap    7280  webkit   9552  other    7440
+CONSOLE NETWORK INFO Successfully preconnected to https://thumb.wikimedia.org/
+m3b-github: loaded after ~215s, measured 30s later
+  heliotrop          resident   36016  private    9376  heap     176  webkit   4288  other    4912
+  WPENetwor          resident   50336  private   26192  heap    7184  webkit   9648  other    9360
+  WPEWebPro          resident  202880  private  170128  heap   51632  webkit  45664  other   72832
+CONSOLE SECURITY ERROR Unrecognized Content-Security-Policy directive 'manifest-src'.
+
+CONSOLE NETWORK INFO Successfully preconnected to https://avatars.githubusercontent.com/
+CONSOLE NETWORK INFO Successfully preconnected to https://github.githubassets.com/
+CONSOLE OTHER WARN The resource https://github.githubassets.com/assets/react-reconciler-8e99e505c4429605.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it wasn't preloaded for nothing.
+m3b-google: loaded after ~80s, measured 30s later
+  heliotrop          resident   36144  private    9328  heap     176  webkit   4240  other    4912
+  WPENetwor          resident   43264  private   20112  heap    2896  webkit   9520  other    7696
+  WPEWebPro          resident  152752  private  120848  heap   50624  webkit  45264  other   24960
+PHASE-DONE

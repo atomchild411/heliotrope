@@ -1,0 +1,19 @@
+m4a-wiki: loaded after ~55s, measured 30s later
+  heliotrop          resident   35648  private    8992  heap     176  webkit   4176  other    4640
+  WPENetwor          resident   48368  private   25344  heap    8224  webkit   9600  other    7520
+  WPEWebPro          resident  130192  private   98608  heap   25520  webkit  41200  other   31888
+CONSOLE NETWORK INFO Successfully preconnected to https://thumb.wikimedia.org/
+m4a-github: loaded after ~235s, measured 30s later
+  heliotrop          resident   35792  private    9008  heap     176  webkit   4224  other    4608
+  WPENetwor          resident   44304  private   20192  heap    2080  webkit   9776  other    8336
+  WPEWebPro          resident  200800  private  168000  heap   39648  webkit  45168  other   83184
+CONSOLE SECURITY ERROR Unrecognized Content-Security-Policy directive 'manifest-src'.
+
+CONSOLE NETWORK INFO Successfully preconnected to https://github.githubassets.com/
+CONSOLE NETWORK INFO Successfully preconnected to https://avatars.githubusercontent.com/
+CONSOLE OTHER WARN The resource https://github.githubassets.com/assets/react-reconciler-8e99e505c4429605.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it wasn't preloaded for nothing.
+m4a-google: loaded after ~85s, measured 30s later
+  heliotrop          resident   35888  private    9008  heap     176  webkit   4224  other    4608
+  WPEWebPro          resident  146224  private  114304  heap   34320  webkit  44272  other   35712
+  WPENetwor          resident   46928  private   23632  heap    6448  webkit   9488  other    7696
+PHASE-DONE

@@ -5,6 +5,10 @@
 set -e
 BUILD=${BUILD:-wpe-build}
 CPU=${CPU:-mips3}
+OPT=${OPT:--O2}              # e.g. -Os
+CFLAGS_EXTRA=${CFLAGS_EXTRA:-}  # e.g. -fomit-frame-pointer
+LDFLAGS_EXTRA=${LDFLAGS_EXTRA:-} # e.g. -Wl,--icf=safe
+# More -D options (feature switches) go on the command line.
 WS=/Volumes/portable/workspace-claude/IRIX
 S=$WS/scratch/pkgsrc-irix/destdir
 export PATH=$WS/scratch/pkgsrc-irix/host/bin:$PATH
@@ -28,8 +32,8 @@ cmake -G Ninja -S wpewebkit-2.52.6 -B $BUILD \
   -DUSE_ATK=OFF -DUSE_GBM=OFF -DUSE_LIBDRM=OFF -DUSE_LIBBACKTRACE=OFF -DUSE_LIBHYPHEN=OFF \
   -DUSE_AVIF=OFF -DUSE_JPEGXL=OFF -DUSE_LCMS=OFF -DUSE_WOFF2=OFF -DUSE_FLITE=OFF \
   -DUSE_SYSPROF_CAPTURE=OFF -DUSE_GSTREAMER=OFF -DENABLE_WEBGL=OFF \
-  "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG -ffile-prefix-map=$PWD/= -isystem $S/opt/pkgsrc/include/gettext" \
-  "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG -ffile-prefix-map=$PWD/= -isystem $S/opt/pkgsrc/include/gettext" \
-  -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -Wl,-rpath,/opt/pkgsrc/lib -L$S/opt/pkgsrc/lib -lintl" \
-  -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -Wl,-rpath,/opt/pkgsrc/lib -L$S/opt/pkgsrc/lib -lintl" \
+  "-DCMAKE_CXX_FLAGS_RELEASE=$OPT $CFLAGS_EXTRA -DNDEBUG -ffile-prefix-map=$PWD/= -isystem $S/opt/pkgsrc/include/gettext" \
+  "-DCMAKE_C_FLAGS_RELEASE=$OPT $CFLAGS_EXTRA -DNDEBUG -ffile-prefix-map=$PWD/= -isystem $S/opt/pkgsrc/include/gettext" \
+  -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -Wl,-rpath,/opt/pkgsrc/lib -L$S/opt/pkgsrc/lib -lintl $LDFLAGS_EXTRA" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -Wl,-rpath,/opt/pkgsrc/lib -L$S/opt/pkgsrc/lib -lintl $LDFLAGS_EXTRA" \
   "$@"
