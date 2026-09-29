@@ -1,0 +1,163 @@
+# SpeedShop pcsamp of the Web process on atom, 2026-09-28: lean build, irix-egl-gles, present mode.
+# Google (load to +10 s), then GitHub techomancer/iris (load to +15 s). tools/ssprof.py.
+
+## prof1
+total 3686 samples (36.9 s at 10 ms)
+    2845  77.2%  /opt/pkgsrc/lib/libWPEWebKit-2.0.so.1
+     342   9.3%  /opt/pkgsrc/lib/libcairo.so.2
+     216   5.9%  /usr/lib32/libc.so.1
+      63   1.7%  /opt/pkgsrc/lib/libfontconfig.so.1
+      62   1.7%  /usr/lib32/libpthread.so
+      39   1.1%  /opt/pkgsrc/lib/libpixman-1.so.0
+      36   1.0%  /opt/pkgsrc/lib/libexpat.so.2
+      25   0.7%  /opt/pkgsrc/lib/libicuuc.so.78
+      20   0.5%  /opt/pkgsrc/lib/libfreetype.so.7
+       9   0.2%  /opt/pkgsrc/lib/libharfbuzz.so.0
+       6   0.2%  /opt/pkgsrc/lib/libglib-2.0.so.0
+       6   0.2%  /opt/pkgsrc/libexec/wpe-webkit-2.0/WPEWebProcess.real
+
+/opt/pkgsrc/lib/libWPEWebKit-2.0.so.1: 2845 samples (77.2% of all)
+     791  21.5%  JS parse + bytecode
+     721  19.6%  WebCore (DOM, style, layout, painting)
+     387  10.5%  JS interpreter (CLoop::execute)
+     353   9.6%  JS runtime (objects, strings, regexps, builtins)
+     198   5.4%  WTF / allocator
+     176   4.8%  other
+     121   3.3%  JS interpreter slow paths
+      65   1.8%  JS garbage collection
+      33   0.9%  WebKit (IPC, process glue)
+  top functions:
+     387  10.5%  JSC::LLInt::CLoop::execute(JSC::OpcodeID, void*, JSC::VM*, JSC::ProtoCallFrame*, bool)
+      79   2.1%  JSC::Lexer<unsigned char>::lexWithoutClearingLineTerminator(JSC::JSToken*, WTF::OptionSet<JSC::LexerFlags, (WT
+      53   1.4%  JSC::SyntaxChecker::Expression JSC::Parser<JSC::Lexer<unsigned char>>::parseMemberExpression<JSC::SyntaxChecke
+      42   1.1%  WebCore::HTMLTokenizer::processToken(WebCore::SegmentedString&)
+      38   1.0%  JSC::SyntaxChecker::DestructuringPattern JSC::Parser<JSC::Lexer<unsigned char>>::parseDestructuringPattern<JSC
+      35   0.9%  JSC::SyntaxChecker::Expression JSC::Parser<JSC::Lexer<unsigned char>>::parseAssignmentExpression<JSC::SyntaxCh
+      35   0.9%  WebCore::Region::Shape::bounds() const
+      34   0.9%  JSC::ASTBuilder::Statement JSC::Parser<JSC::Lexer<char16_t>>::parseTryStatement<JSC::ASTBuilder>(JSC::ASTBuild
+      32   0.9%  WebCore::Region::Shape::appendSpans(WebCore::Region::Shape const&, std::__1::span<WebCore::Region::Span const,
+      30   0.8%  llint_slow_path_get_by_id_with_this
+      24   0.7%  WTF::Vector<unsigned char, 0u, WTF::UnsafeVectorOverflow, 16u, JSC::InstructionStreamBufferMalloc>::operator=(
+      23   0.6%  JSC::CLoopStack::addToCommittedByteCount(long)
+      22   0.6%  JSC::ASTBuilder::Expression JSC::Parser<JSC::Lexer<unsigned char>>::parseMemberExpression<JSC::ASTBuilder>(JSC
+      18   0.5%  JSC::SyntaxChecker::FormalParameterList JSC::Parser<JSC::Lexer<unsigned char>>::parseFunctionParameters<JSC::S
+      18   0.5%  JSC::SyntaxChecker::DestructuringPattern JSC::Parser<JSC::Lexer<unsigned char>>::parseObjectRestElement<JSC::S
+      17   0.5%  WebKit::WebFullScreenManager::~WebFullScreenManager()
+      17   0.5%  fast_float::from_chars_result_t<char16_t> fast_float::from_chars_advanced<double, char16_t>(char16_t const*, c
+      15   0.4%  JSC::BytecodeGenerator::emitGetFromScope(JSC::RegisterID*, JSC::RegisterID*, JSC::Variable const&, JSC::Resolv
+      15   0.4%  iterator_open_try_fast_wide16
+      14   0.4%  WebCore::CSSSelector::selectorText(WTF::StringView, WTF::StringView) const
+      13   0.4%  double std::__1::__math::__hypot[abi:sn210108]<double>(double, double, double)
+      12   0.3%  JSC::CodeBlock::finishCreation(JSC::VM&, JSC::ScriptExecutable*, JSC::UnlinkedCodeBlock*, JSC::JSScope*)
+      12   0.3%  WebCore::PathUtilities::pathsWithShrinkWrappedRects(WTF::Vector<WebCore::FloatRect, 0u, WTF::CrashOnOverflow, 
+      11   0.3%  WTF::StringViewHashTranslator::hash(WTF::StringView)
+      11   0.3%  JSC::ASTBuilder::SourceElements JSC::Parser<JSC::Lexer<unsigned char>>::parseSourceElements<JSC::ASTBuilder>(J
+
+/usr/lib32/libc.so.1: 216 samples (5.9% of all)
+     216   5.9%  other
+  top functions:
+      44   1.2%  malloc
+      21   0.6%  setinvent_r
+      19   0.5%  __lfmt_log
+      18   0.5%  memset
+      13   0.4%  memmove
+      11   0.3%  __free
+       7   0.2%  ioctl
+       7   0.2%  usfree
+       6   0.2%  recvmsg
+       6   0.2%  strncmp
+       4   0.1%  close
+       4   0.1%  __readenv_sigfpe
+       4   0.1%  setoserror
+       4   0.1%  unlink
+       4   0.1%  memcmp
+       4   0.1%  strspn
+       3   0.1%  _doprnt
+       3   0.1%  strxfrm
+       3   0.1%  getgrgid_r
+       2   0.1%  syscall
+       2   0.1%  atoi
+       2   0.1%  __fcntl
+       2   0.1%  ungetc
+       2   0.1%  semctl
+       2   0.1%  xdrstdio_create
+
+## prof2
+total 2462 samples (24.6 s at 10 ms)
+    1644  66.8%  /opt/pkgsrc/lib/libWPEWebKit-2.0.so.1
+     331  13.4%  /usr/lib32/libc.so.1
+     115   4.7%  /opt/pkgsrc/lib/libharfbuzz.so.0
+     106   4.3%  /usr/lib32/libpthread.so
+      97   3.9%  /opt/pkgsrc/lib/libfontconfig.so.1
+      65   2.6%  /opt/pkgsrc/lib/libicuuc.so.78
+      30   1.2%  /opt/pkgsrc/lib/libexpat.so.2
+      28   1.1%  /opt/pkgsrc/lib/libfreetype.so.7
+      17   0.7%  /opt/pkgsrc/lib/libcairo.so.2
+       9   0.4%  /opt/pkgsrc/lib/libglib-2.0.so.0
+       8   0.3%  /opt/pkgsrc/libexec/wpe-webkit-2.0/WPEWebProcess.real
+       5   0.2%  /var/tmp/iegl/libiegl.so.1
+
+/opt/pkgsrc/lib/libWPEWebKit-2.0.so.1: 1644 samples (66.8% of all)
+    1318  53.5%  WebCore (DOM, style, layout, painting)
+     149   6.1%  WTF / allocator
+      82   3.3%  other
+      46   1.9%  JS interpreter (CLoop::execute)
+      22   0.9%  JS runtime (objects, strings, regexps, builtins)
+      15   0.6%  WebKit (IPC, process glue)
+       8   0.3%  JS parse + bytecode
+       4   0.2%  JS garbage collection
+  top functions:
+      46   1.9%  JSC::LLInt::CLoop::execute(JSC::OpcodeID, void*, JSC::VM*, JSC::ProtoCallFrame*, bool)
+      30   1.2%  WebCore::SelectorChecker::matchRecursively(WebCore::SelectorChecker::CheckingContext&, WebCore::SelectorChecke
+      29   1.2%  WebCore::Style::ElementRuleCollector::collectMatchingRules(WebCore::Style::MatchRequest const&)
+      22   0.9%  WebCore::toJS(JSC::JSGlobalObject*, WebCore::JSDOMGlobalObject*, WebCore::EventTarget&)
+      22   0.9%  WebCore::CSSUnitType WebCore::cssPrimitiveValueUnitFromTrie<char16_t>(std::__1::span<char16_t const, 429496729
+      19   0.8%  WebCore::Style::Adjuster::adjustForSiteSpecificQuirks(WebCore::RenderStyle&) const
+      18   0.7%  WebCore::HTTPHeaderNamesHash::header_name_hash_function(char const*, unsigned int)
+      18   0.7%  WebCore::CSSPropertyParsing::parsePageDescriptor(WebCore::CSSParserTokenRange&, WebCore::CSSPropertyID, WebCor
+      18   0.7%  WTF::Vector<std::__1::unique_ptr<WebCore::MutableCSSSelector, std::__1::default_delete<WebCore::MutableCSSSele
+      16   0.6%  WebCore::Style::ElementRuleCollector::collectMatchingRules(WebCore::Style::DeclarationOrigin)
+      13   0.5%  JSC::UnlinkedStringJumpTable* WTF::Vector<JSC::UnlinkedStringJumpTable, 0u, WTF::CrashOnOverflow, 16u, WTF::Fa
+      13   0.5%  void fast_float::parse_mantissa<char16_t>(fast_float::bigint&, fast_float::parsed_number_string_t<char16_t>&, 
+      13   0.5%  WebCore::Style::RuleFeatureSet::add(WebCore::Style::RuleFeatureSet const&)
+      12   0.5%  WebCore::CSSParser::parsePageSelector(WebCore::CSSParserTokenRange, WebCore::StyleSheetContents*)
+      12   0.5%  WebCore::CSSTokenizer::rightBracket(char16_t)
+      11   0.4%  std::__1::span<unsigned char, 4u>::subspan[abi:sn210108](unsigned int, unsigned int) const
+      10   0.4%  WTF::AtomStringImpl::add(std::__1::span<char16_t const, 4294967295u>)
+      10   0.4%  WebCore::CSSParser::consumePositionTryRule(WebCore::CSSParserTokenRange, WebCore::CSSParserTokenRange)
+       9   0.4%  WebCore::CSSParser::consumeImportRule(WebCore::CSSParserTokenRange)
+       9   0.4%  WebCore::SegmentedString::clear()
+       9   0.4%  void std::__1::__introsort<std::__1::_RangeAlgPolicy, WebCore::Style::collectAnchorsForAnchorName(WebCore::Doc
+       9   0.4%  void std::__1::__inplace_merge<std::__1::_RangeAlgPolicy, WebCore::Style::PropertyCascade::addImportantMatches
+       8   0.3%  WTF::StringBuilder::appendQuotedJSONString(WTF::String const&)
+       8   0.3%  WTF::StringImpl::endsWithIgnoringASCIICase(WTF::StringView) const
+       8   0.3%  WebCore::CSSParser::consumeQualifiedRule(WebCore::CSSParserTokenRange&, WebCore::CSSParser::AllowedRules)
+
+/usr/lib32/libc.so.1: 331 samples (13.4% of all)
+     331  13.4%  other
+  top functions:
+      95   3.9%  malloc
+      32   1.3%  memmove
+      28   1.1%  memset
+      24   1.0%  __lfmt_log
+      21   0.9%  lfmt
+      13   0.5%  fgets
+      12   0.5%  usrealloc
+      10   0.4%  memcmp
+       8   0.3%  recvmsg
+       8   0.3%  strncmp
+       7   0.3%  ioctl
+       7   0.3%  atoi
+       7   0.3%  setinvent_r
+       6   0.2%  close
+       6   0.2%  getenv
+       6   0.2%  setoserror
+       6   0.2%  _doprnt
+       4   0.2%  xstat
+       3   0.1%  ungetc
+       3   0.1%  clntudp_bufcreate
+       3   0.1%  xdrstdio_create
+       2   0.1%  stat
+       2   0.1%  strcpy
+       2   0.1%  brk
+       2   0.1%  syscall

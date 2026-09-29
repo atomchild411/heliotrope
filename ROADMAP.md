@@ -226,6 +226,19 @@ WebKit 2.44 removed it as unmaintained; it targeted o32, MIPS32r2 and in
 practice little-endian, so it never fit IRIX (n32, MIPS IV: no ins/ext,
 seb/seh, 3-operand mul, rotr; big-endian) as it was.
 
+**Measured first (2026-09-28, `tools/profile-2026-09-28-js.txt`):** with
+compositing on the GPU, the interpreter is a small share of the Web process's
+CPU: Google 10.5% in CLoop::execute (+3.3% slow paths) against 21.5% parsing
+and bytecode generation, 19.6% WebCore, 9.3% Cairo; GitHub 1.9% against 53.5%
+WebCore (style matching, CSS parsing), 13.4% libc (malloc ~4%), ~11% text
+(harfbuzz, fontconfig, ICU). An asm LLInt (2-4x the CLoop) would save ~5-8% on
+Google and ~1% on GitHub, so it waits until something JavaScript-bound needs
+it. The WebKit 2.42.5 MIPS sources are in `scratch/wpe/wpe-2.42-mips`
+(interpreter backend offlineasm/mips.rb 1087 lines; the JIT's assembler
+another 5600). Bigger levers first: -O2 instead of -Os for WebCore and JSC,
+JSC's bytecode disk cache (parsing is 21.5% on Google), a faster allocator
+than IRIX malloc, and fewer fontconfig/lfmt calls.
+
 1. **MIPS n32 LLInt backend** (next big JavaScript-speed item, after the lean
    build and the memory work): revive offlineasm's MIPS backend from WebKit
    2.42 and port it to n32, big-endian, MIPS IV. Replaces the CLoop; no JIT,
