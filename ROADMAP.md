@@ -5,6 +5,19 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
 
 ## Doing
 
+0. **Next: irix-egl-gles as a pkgsrc package, then Mesa out** (in support of
+   heliotrope; code/irix-egl-gles).
+   - `graphics/irix-egl-gles` in our pkgsrc fork: IRIX only, depends on
+     nothing but IRIX's libGL.so and libX11; installs libEGL.so.1,
+     libGLESv2.so.2, libiegl.so.1, the Khronos headers, egl.pc / glesv2.pc
+     and egl-gles-info; CONFLICTS MesaLib (same library names).
+   - libepoxy then finds it at its usual paths (`EPOXY_EGL_LIB` stays as a
+     development switch); heliotrope's package depends on irix-egl-gles
+     instead of MesaLib, and present mode is on by default.
+   - Take MesaLib off atom and mark it NOT_FOR_PLATFORM IRIX so nothing pulls
+     it back (`notes/irix-porting-lore.md`, "Graphics").
+   - Open: where its source lives for pkgsrc to fetch (the repo is local
+     only, like heliotrope's; a local distfile until then).
 1. **Content blocking on by default.** WebKit content filters (JSON rule
    lists, WebKitUserContentFilterStore) loaded from a standard ad/tracker
    list, compiled once and cached on disk.
@@ -25,9 +38,10 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
 6. **Tune JSC's heap for small machines** (GC earlier; its sizing reads RAM).
 7. **Malloc**: try IRIX `mallopt()` tuning and SGI's libmalloc, then a modern
    allocator.
-8. **Frames**: convert only damaged rectangles and cap at 30 fps (easy), then
-   our own WPE platform rendering straight into an X MIT-SHM image in the
-   visual's format (removes a copy and a full-frame buffer).
+8. ~~**Frames**~~: done differently (2026-09-28): with irix-egl-gles, WebKit
+   copies each frame on the GPU into heliotrope's page window (present mode,
+   patch 0010); no readback, no conversion. The shared-memory path remains
+   only as the fallback.
 9. **Trim the build**: section GC, identical code folding, unused features.
 10. **Network process (~50 MB)**: profile (OpenSSL certificate store,
     libsoup) for easy wins.
