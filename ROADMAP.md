@@ -161,6 +161,18 @@ transformed layers, rounded-rectangle clips (stencil), blurs and shadows
 (EXT_convolution where present). Box shadows are missing with Mesa too
 (WebKit/Cairo on IRIX, separate).
 
+**Effects and present mode (2026-09-28):** the webkit-texmap recipe now draws
+CSS colour filters (colour-matrix copies), blur and drop shadows (additive
+taps), rounded clips (stencil) and smooth edges; an effects test page matches
+Mesa. Frames go into the window with no readback: irix-egl-gles
+`eglPresentToWindowIRIX` (glCopyPixels pbuffer -> window, GPU to GPU; an
+exposed window is repainted by a thread in the library), WebKit patch 0010
+calls it instead of glReadPixels when heliotrope names its page window in
+`WPE_PRESENT_X11_WINDOW`, and heliotrope skips its per-pixel copy (was
+20-800 ms a frame). Heliotrope turns it on when the EGL libepoxy will use
+offers the call (`HELIOTROPE_NO_PRESENT=1` to turn it off). To try it beside
+Mesa: `/var/tmp/iegl/hi.sh [URL]` on atom.
+
 **Decided 2026-09-28: irix-egl-gles adapts at run time.** We have no real
 SGI hardware; testers ("friends") will run it on theirs. So nothing is
 tuned per board by hand. At eglInitialize, once per display, it probes

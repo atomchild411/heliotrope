@@ -39,6 +39,7 @@
 #include <X11/cursorfont.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XShm.h>
+#include <dlfcn.h>
 
 #include <glib-unix.h>
 #include <glib/gstdio.h>
@@ -87,6 +88,12 @@ typedef struct {
     gboolean first_frame_seen;
     unsigned frames;
     Atom wm_delete, clipboard, utf8_string, selection_property;
+
+    /* Present mode (irix-egl-gles): WebKit copies its frames on the GPU into
+     * page_win, a child window over the page area; no pixels reach us. The
+     * status line then needs its own window above it. */
+    gboolean present;
+    Window page_win, status_win;
 
     XImage *image;              /* the last frame, in the visual's format */
     XShmSegmentInfo shm;
@@ -410,8 +417,25 @@ static void draw_scrollbar(App *app)
 static void draw_status(App *app)
 {
     int w, y;
-    if (!app->status || !*app->status || !app->font)
+    if (!app->status || !*app->status || !app->font) {
+        if (app->present)
+            XUnmapWindow(app->dpy, app->status_win);
         return;
+    }
+    if (app->present) {
+        int h = app->font->ascent + app->font->descent + 6;
+        w = XTextWidth(app->font, app->status, (int)strlen(app->status)) + 10;
+        if (w > page_width(app))
+            w = page_width(app);
+        XMoveResizeWindow(app->dpy, app->status_win, 0, app->height - h, w, h);
+        XMapRaised(app->dpy, app->status_win);
+        XSetForeground(app->dpy, app->gc, app->status_bg);
+        XFillRectangle(app->dpy, app->status_win, app->gc, 0, 0, w, h);
+        XSetForeground(app->dpy, app->gc, app->ink);
+        XDrawString(app->dpy, app->status_win, app->gc, 5, h - app->font->descent - 3,
+            app->status, (int)strlen(app->status));
+        return;
+    }
     w = XTextWidth(app->font, app->status, (int)strlen(app->status)) + 10;
     if (w > page_width(app))
         w = page_width(app);
@@ -425,8 +449,10 @@ static void draw_status(App *app)
 
 static void draw_page(App *app)
 {
-    if (!app->image)
+    if (app->present || !app->image) {
+        draw_status(app);
         return;
+    }
     if (app->use_shm)
         XShmPutImage(app->dpy, app->win, app->gc, app->image, 0, 0, 0, BAR_HEIGHT,
             app->image_width, app->image_height, False);
@@ -626,6 +652,13 @@ static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
         timing_mark(app, "first frame");
     } else if (app->timing && app->load_start)
         timing_mark(app, "frame");
+    if (app->present) {
+        /* WebKit has already copied the frame into page_win. */
+        if (app->timing)
+            g_printerr("heliotrope:          frame presented by WebKit\n");
+        query_metrics(app, FALSE);
+        return;
+    }
     GError *error = NULL;
     /* transfer none: the pixels belong to the buffer (valid until it is released). */
     GBytes *bytes = wpe_buffer_import_to_pixels(buffer, &error);
@@ -689,9 +722,35 @@ static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
 
 /* --- page state --------------------------------------------------------------- */
 
+/* The page as shown, read back from the window (present mode, for -o). */
+static void grab_page(App *app)
+{
+    int w = page_width(app), h = page_height(app), x, y;
+    XImage *img = XGetImage(app->dpy, app->page_win, 0, 0, w, h, AllPlanes, ZPixmap);
+    unsigned long rm = app->visual->red_mask, gm = app->visual->green_mask, bm = app->visual->blue_mask;
+    guint8 *rgb;
+
+    if (!img)
+        return;
+    g_free(app->last_rgb);
+    app->last_rgb = rgb = g_malloc((size_t)w * h * 3);
+    app->last_width = w;
+    app->last_height = h;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            unsigned long p = XGetPixel(img, x, y);
+            *rgb++ = (guint8)((p & rm) >> app->rshift);
+            *rgb++ = (guint8)((p & gm) >> app->gshift);
+            *rgb++ = (guint8)((p & bm) >> app->bshift);
+        }
+    XDestroyImage(img);
+}
+
 static gboolean take_shot(gpointer data)
 {
     App *app = data;
+    if (app->present)
+        grab_page(app);
     if (app->last_rgb)
         write_ppm(app);
     app->shot_done = TRUE;
@@ -1323,6 +1382,8 @@ static void handle_x_event(App *app, XEvent *ev)
         if (ev->xconfigure.width != app->width || ev->xconfigure.height != app->height) {
             app->width = ev->xconfigure.width;
             app->height = ev->xconfigure.height;
+            if (app->present)
+                XResizeWindow(app->dpy, app->page_win, page_width(app), page_height(app));
             wpe_toplevel_resize(wpe_view_get_toplevel(app->view), page_width(app), page_height(app));
             redraw(app);
         }
@@ -1527,9 +1588,43 @@ static gboolean open_window(App *app)
     app->thumb = color(app, 0xb3, 0xa4, 0xc8);
     app->status_bg = color(app, 0xee, 0xe8, 0xf4);
     set_cursor(app, app->arrow);
+    if (app->present) {
+        /* No event mask: input still reaches app->win. No background: only
+         * WebKit draws here. */
+        XSetWindowAttributes pa;
+        pa.colormap = attrs.colormap;
+        pa.border_pixel = 0;
+        pa.background_pixmap = None;
+        app->page_win = XCreateWindow(app->dpy, app->win, 0, BAR_HEIGHT, page_width(app), page_height(app), 0,
+            app->depth, InputOutput, app->visual, CWColormap | CWBorderPixel | CWBackPixmap, &pa);
+        XMapWindow(app->dpy, app->page_win);
+        app->status_win = XCreateWindow(app->dpy, app->win, 0, 0, 1, 1, 0, app->depth, InputOutput, app->visual,
+            CWColormap | CWBorderPixel, &pa);
+    }
     XMapWindow(app->dpy, app->win);
     XFlush(app->dpy);
     return TRUE;
+}
+
+/* Can the web process put frames straight into a window? It can when its
+ * EGL (the one libepoxy will open) is irix-egl-gles, which offers
+ * eglPresentToWindowIRIX. HELIOTROPE_NO_PRESENT=1 keeps the shared-memory
+ * copy. */
+static gboolean present_available(void)
+{
+    const char *path = getenv("EPOXY_EGL_LIB");
+    void *lib, *(*get_proc)(const char *);
+    gboolean yes = FALSE;
+
+    if (env_on("HELIOTROPE_NO_PRESENT"))
+        return FALSE;
+    lib = dlopen(path && *path ? path : "/opt/pkgsrc/lib/libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib)
+        return FALSE;
+    get_proc = (void *(*)(const char *))dlsym(lib, "eglGetProcAddress");
+    yes = get_proc && get_proc("eglPresentToWindowIRIX");
+    dlclose(lib);
+    return yes;
 }
 
 int main(int argc, char **argv)
@@ -1563,8 +1658,17 @@ int main(int argc, char **argv)
     raise_descriptor_limit();
 
     app.edit = g_string_new(NULL);
+    app.present = present_available();
     if (!open_window(&app))
         return 1;
+    if (app.present) {
+        char id[32];
+        /* the web processes inherit it (WebKit patch 0010) */
+        g_snprintf(id, sizeof id, "0x%lx", (unsigned long)app.page_win);
+        g_setenv("WPE_PRESENT_X11_WINDOW", id, TRUE);
+        if (app.timing)
+            g_printerr("heliotrope: frames presented into window %s\n", id);
+    }
 
     display = wpe_display_headless_new();
     {

@@ -1,0 +1,66 @@
+From ae1d1b1d3d10db72e5d203c60f08309bf54b2944 Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 19:41:38 -0800
+Subject: [PATCH] AcceleratedSurface: present frames into an X window where EGL
+ can
+
+With EGL_IRIX_present_to_window (irix-egl-gles) and WPE_PRESENT_X11_WINDOW
+set by the UI process, the shared-memory render target copies each frame
+into that window on the GPU instead of reading it back; the buffer still
+goes to the UI process for frame accounting. Falls back to glReadPixels.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../AcceleratedSurface.cpp                    | 34 ++++++++++++++++++-
+ 1 file changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp b/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
+index fc00aa6e..7e69928a 100644
+--- a/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
++++ b/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
+@@ -511,9 +511,41 @@ AcceleratedSurface::RenderTargetSHMImage::~RenderTargetSHMImage()
+         glDeleteRenderbuffers(1, &m_colorBuffer);
+ }
+ 
++// With EGL_IRIX_present_to_window (irix-egl-gles on IRIX) and an X window
++// named by the UI process in WPE_PRESENT_X11_WINDOW, frames are copied into
++// that window on the GPU instead of being read back into shared memory.
++using PresentToWindowFunction = EGLBoolean (*)(EGLDisplay, EGLNativeWindowType, EGLint, EGLint, EGLBoolean, const EGLint*, EGLint);
++
++static PresentToWindowFunction presentToWindowFunction(unsigned long& window)
++{
++    static PresentToWindowFunction function;
++    static unsigned long presentWindow;
++    static bool initialized;
++    if (!initialized) {
++        initialized = true;
++        if (const char* value = getenv("WPE_PRESENT_X11_WINDOW")) {
++            presentWindow = strtoul(value, nullptr, 0);
++            if (presentWindow)
++                function = reinterpret_cast<PresentToWindowFunction>(eglGetProcAddress("eglPresentToWindowIRIX"));
++        }
++    }
++    window = presentWindow;
++    return function;
++}
++
+ void AcceleratedSurface::RenderTargetSHMImage::didRenderFrame(Vector<IntRect, 1>&& damageRects)
+ {
+-    glReadPixels(0, 0, m_bitmap->size().width(), m_bitmap->size().height(), GL_BGRA, GL_UNSIGNED_BYTE, m_bitmap->mutableSpan().data());
++    unsigned long window = 0;
++    bool presented = false;
++    if (auto present = presentToWindowFunction(window)) {
++        Vector<EGLint> rects;
++        for (const auto& rect : damageRects)
++            rects.appendList({ rect.x(), rect.y(), rect.width(), rect.height() });
++        presented = present(PlatformDisplay::sharedDisplay().eglDisplay(), (EGLNativeWindowType)window,
++            m_bitmap->size().width(), m_bitmap->size().height(), EGL_TRUE, rects.span().data(), rects.size() / 4);
++    }
++    if (!presented)
++        glReadPixels(0, 0, m_bitmap->size().width(), m_bitmap->size().height(), GL_BGRA, GL_UNSIGNED_BYTE, m_bitmap->mutableSpan().data());
+     RenderTargetShareableBuffer::didRenderFrame(WTF::move(damageRects));
+ }
+ 
+-- 
+2.54.0 (Apple Git-157)
+
