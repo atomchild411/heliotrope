@@ -3,15 +3,18 @@
  *
  *   heliotrope [-g WIDTHxHEIGHT[+X+Y]] [-o shot.ppm] [-s seconds] [-q] [URL]
  *
- * WebKit renders into WPE's headless platform (EGL on Mesa's software
- * rasterizer, frames in shared memory); each frame is copied into a 24-bit
- * TrueColor X window, and X input goes back to WebKit as WPE events.
+ * WebKit renders into WPE's headless platform. With irix-egl-gles (EGL and
+ * GLES on IRIX's own OpenGL) it copies each frame on the GPU into the page
+ * area's child window; otherwise frames arrive in shared memory and are
+ * copied into a 24-bit TrueColor X window. X input goes back to WebKit as
+ * WPE events.
  *
  * The toolbar has Back, Forward, Reload (Stop while loading) and Home, and
  * the address field: click it (or Ctrl+L) and type; Enter goes, Escape
  * cancels. Text that is not an address searches DuckDuckGo Lite. The
- * scrollbar on the right drags, and a click above or below its thumb moves a
- * page. Alt+Left/Right go back and forward, F5 reloads, Ctrl+Q quits.
+ * scrollbar is WebKit's own (HELIOTROPE_OVERLAY_SCROLLBARS=1 for the kind
+ * that appears only while scrolling). Alt+Left/Right go back and forward,
+ * F5 reloads, Ctrl+Q quits.
  *
  * -o writes the page as a PPM image once it has loaded and -s seconds
  * (default 5) have passed; -q then quits. HELIOTROPE_HOME sets Home (default:
@@ -56,10 +59,8 @@
 #endif
 
 #define BAR_HEIGHT 30           /* toolbar */
-#define SCROLLBAR_WIDTH 14
 #define BUTTON_WIDTH 28
 #define BUTTON_HEIGHT 24
-#define MIN_THUMB 24
 
 enum { BUTTON_BACK, BUTTON_FORWARD, BUTTON_RELOAD, BUTTON_HOME, BUTTON_JS, BUTTON_BLOCK, N_BUTTONS };
 
@@ -76,7 +77,7 @@ typedef struct {
     Cursor arrow, hand, text;
     Cursor current_cursor;
     unsigned long bar_bg, bar_shadow, bar_light, ink, ink_disabled, field_bg, field_edit_bg,
-        selection, progress, trough, thumb, status_bg;
+        selection, progress, status_bg;
     int rshift, gshift, bshift; /* of the visual's masks */
     int width, height;          /* of the window */
     int x, y;                   /* where -g asked for it */
@@ -112,14 +113,6 @@ typedef struct {
     double progress_value;
     int pressed_button;         /* toolbar button under a press, or -1 */
 
-    /* the page's scroll position, as the page reports it */
-    double scroll_y, scroll_height, view_height;
-    gboolean metrics_pending;
-    gint64 metrics_time;
-    gboolean dragging_thumb;
-    int drag_offset;
-    double scroll_target;       /* a scrollTo waiting for the previous one */
-    gboolean scroll_pending, scroll_queued;
 
     char *status;               /* the link under the pointer */
 
@@ -156,7 +149,7 @@ static int mask_shift(unsigned long mask)
 
 static int page_width(App *app)
 {
-    return app->width > SCROLLBAR_WIDTH ? app->width - SCROLLBAR_WIDTH : 1;
+    return app->width > 0 ? app->width : 1;
 }
 
 static int page_height(App *app)
@@ -380,40 +373,6 @@ static void draw_bar(App *app)
     draw_field(app);
 }
 
-static void thumb_geometry(App *app, int *y, int *h)
-{
-    int track = page_height(app);
-    if (app->scroll_height <= app->view_height || app->scroll_height <= 0) {
-        *y = BAR_HEIGHT;
-        *h = track;
-        return;
-    }
-    *h = (int)(track * app->view_height / app->scroll_height);
-    if (*h < MIN_THUMB)
-        *h = MIN_THUMB;
-    if (*h > track)
-        *h = track;
-    *y = BAR_HEIGHT + (int)((track - *h) * app->scroll_y / (app->scroll_height - app->view_height));
-}
-
-static void draw_scrollbar(App *app)
-{
-    int x = page_width(app), ty, th;
-    XRectangle t;
-    XSetForeground(app->dpy, app->gc, app->trough);
-    XFillRectangle(app->dpy, app->win, app->gc, x, BAR_HEIGHT, SCROLLBAR_WIDTH, page_height(app));
-    if (app->scroll_height <= app->view_height)
-        return;
-    thumb_geometry(app, &ty, &th);
-    t.x = x + 1;
-    t.y = ty;
-    t.width = SCROLLBAR_WIDTH - 2;
-    t.height = th;
-    XSetForeground(app->dpy, app->gc, app->thumb);
-    XFillRectangle(app->dpy, app->win, app->gc, t.x, t.y, t.width, t.height);
-    bevel(app, &t, FALSE);
-}
-
 static void draw_status(App *app)
 {
     int w, y;
@@ -466,99 +425,7 @@ static void redraw(App *app)
 {
     draw_bar(app);
     draw_page(app);
-    draw_scrollbar(app);
     XFlush(app->dpy);
-}
-
-/* --- the page's scroll position ---------------------------------------------- */
-
-static void metrics_ready(GObject *object, GAsyncResult *result, gpointer data)
-{
-    App *app = data;
-    JSCValue *value = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(object), result, NULL);
-    app->metrics_pending = FALSE;
-    if (!value)
-        return;
-    if (jsc_value_is_string(value)) {
-        char *s = jsc_value_to_string(value);
-        double y, h, v;
-        if (sscanf(s, "%lf,%lf,%lf", &y, &h, &v) == 3
-            && (y != app->scroll_y || h != app->scroll_height || v != app->view_height)) {
-            app->scroll_y = y;
-            app->scroll_height = h;
-            app->view_height = v;
-            if (!app->dragging_thumb)
-                draw_scrollbar(app);
-            XFlush(app->dpy);
-        }
-        g_free(s);
-    }
-    g_object_unref(value);
-}
-
-static void query_metrics(App *app, gboolean now)
-{
-    static const char script[] =
-        "(function(){var e=document.scrollingElement||document.documentElement;"
-        "return window.scrollY+','+(e?e.scrollHeight:0)+','+window.innerHeight;})()";
-    gint64 t = g_get_monotonic_time();
-    if (env_on("HELIOTROPE_NO_METRICS"))
-        return;
-    if (app->metrics_pending || (!now && t - app->metrics_time < 300000))
-        return;
-    app->metrics_pending = TRUE;
-    app->metrics_time = t;
-    webkit_web_view_evaluate_javascript(app->web_view, script, -1, NULL, NULL, NULL, metrics_ready, app);
-}
-
-static void scroll_done(GObject *object, GAsyncResult *result, gpointer data);
-
-static void run_scroll(App *app, const char *script)
-{
-    app->scroll_pending = TRUE;
-    webkit_web_view_evaluate_javascript(app->web_view, script, -1, NULL, NULL, NULL, scroll_done, app);
-}
-
-static void scroll_done(GObject *object, GAsyncResult *result, gpointer data)
-{
-    App *app = data;
-    JSCValue *value = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(object), result, NULL);
-    if (value)
-        g_object_unref(value);
-    app->scroll_pending = FALSE;
-    if (app->scroll_queued) {
-        char script[64];
-        app->scroll_queued = FALSE;
-        g_snprintf(script, sizeof script, "window.scrollTo(window.scrollX,%d)", (int)app->scroll_target);
-        run_scroll(app, script);
-    } else
-        query_metrics(app, TRUE);
-}
-
-static void scroll_to(App *app, double y)
-{
-    char script[64];
-    double max = app->scroll_height - app->view_height;
-    if (y > max)
-        y = max;
-    if (y < 0)
-        y = 0;
-    app->scroll_target = y;
-    if (app->scroll_pending) {
-        app->scroll_queued = TRUE;
-        return;
-    }
-    g_snprintf(script, sizeof script, "window.scrollTo(window.scrollX,%d)", (int)y);
-    run_scroll(app, script);
-}
-
-static void scroll_pages(App *app, int pages)
-{
-    char script[80];
-    if (app->scroll_pending)
-        return;
-    g_snprintf(script, sizeof script, "window.scrollBy(0,%d*Math.max(40,window.innerHeight-40))", pages);
-    run_scroll(app, script);
 }
 
 /* --- frames from WebKit ----------------------------------------------------- */
@@ -656,7 +523,6 @@ static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
         /* WebKit has already copied the frame into page_win. */
         if (app->timing)
             g_printerr("heliotrope:          frame presented by WebKit\n");
-        query_metrics(app, FALSE);
         return;
     }
     GError *error = NULL;
@@ -717,7 +583,6 @@ static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
     XFlush(app->dpy);
     if (app->timing)
         g_printerr("heliotrope:          frame %dx%d copied to X in %.0f ms\n", w, h, (g_get_monotonic_time() - t0) / 1e3);
-    query_metrics(app, FALSE);
 }
 
 /* --- page state --------------------------------------------------------------- */
@@ -776,18 +641,12 @@ static void load_changed(WebKitWebView *web_view, WebKitLoadEvent event, App *ap
         timing_mark(app, "load finished");
     if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_REDIRECTED)
         apply_site_choices(app);
-    if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_COMMITTED) {
-        app->scroll_y = 0;
-        app->scroll_height = 0;
-    }
     if (event == WEBKIT_LOAD_FINISHED) {
         g_printerr("heliotrope: loaded %s\n", webkit_web_view_get_uri(app->web_view));
         if (app->shot_path && !app->shot_done)
             g_timeout_add_seconds(app->shot_delay, take_shot, app);
-        query_metrics(app, TRUE);
     }
     draw_bar(app);
-    draw_scrollbar(app);
     XFlush(app->dpy);
 }
 
@@ -1333,44 +1192,6 @@ static void handle_toolbar_button(App *app, XButtonEvent *b)
     }
 }
 
-static void handle_scrollbar_button(App *app, XButtonEvent *b)
-{
-    int ty, th;
-    if (b->type == ButtonRelease) {
-        app->dragging_thumb = FALSE;
-        query_metrics(app, TRUE);
-        return;
-    }
-    if (b->button != Button1 || app->scroll_height <= app->view_height)
-        return;
-    thumb_geometry(app, &ty, &th);
-    if (b->y < ty)
-        scroll_pages(app, -1);
-    else if (b->y >= ty + th)
-        scroll_pages(app, 1);
-    else {
-        app->dragging_thumb = TRUE;
-        app->drag_offset = b->y - ty;
-    }
-}
-
-static void drag_thumb(App *app, int y)
-{
-    int ty, th, track = page_height(app);
-    double f;
-    thumb_geometry(app, &ty, &th);
-    if (track <= th)
-        return;
-    f = (double)(y - app->drag_offset - BAR_HEIGHT) / (track - th);
-    if (f < 0)
-        f = 0;
-    if (f > 1)
-        f = 1;
-    app->scroll_y = f * (app->scroll_height - app->view_height);
-    draw_scrollbar(app);
-    scroll_to(app, app->scroll_y);
-}
-
 static void handle_x_event(App *app, XEvent *ev)
 {
     switch (ev->type) {
@@ -1397,10 +1218,6 @@ static void handle_x_event(App *app, XEvent *ev)
     case ButtonPress:
     case ButtonRelease: {
         XButtonEvent *b = &ev->xbutton;
-        if (app->dragging_thumb || (b->y >= BAR_HEIGHT && b->x >= page_width(app))) {
-            handle_scrollbar_button(app, b);
-            break;
-        }
         if (b->y < BAR_HEIGHT) {
             handle_toolbar_button(app, b);
             break;
@@ -1434,11 +1251,7 @@ static void handle_x_event(App *app, XEvent *ev)
         /* only the latest position matters */
         while (XCheckTypedWindowEvent(app->dpy, app->win, MotionNotify, &latest))
             ;
-        if (app->dragging_thumb) {
-            drag_thumb(app, m->y);
-            break;
-        }
-        if (m->y < BAR_HEIGHT || m->x >= page_width(app)) {
+        if (m->y < BAR_HEIGHT) {
             XRectangle r;
             field_rect(app, &r);
             set_cursor(app, in_rect(&r, m->x, m->y) ? app->text : app->arrow);
@@ -1465,8 +1278,6 @@ static void handle_x_event(App *app, XEvent *ev)
         send(app, wpe_event_keyboard_new(ev->type == KeyPress ? WPE_EVENT_KEYBOARD_KEY_DOWN : WPE_EVENT_KEYBOARD_KEY_UP,
             app->view, WPE_INPUT_SOURCE_KEYBOARD, (guint32)k->time, modifiers_of(k->state),
             k->keycode, (guint)sym));
-        if (ev->type == KeyRelease)
-            query_metrics(app, FALSE);
         break;
     }
     case SelectionNotify:
@@ -1584,8 +1395,6 @@ static gboolean open_window(App *app)
     app->field_edit_bg = color(app, 0xff, 0xff, 0xff);
     app->selection = color(app, 0xc9, 0xb3, 0xe6);
     app->progress = color(app, 0x8a, 0x5c, 0xc0);
-    app->trough = color(app, 0xcf, 0xc8, 0xd9);
-    app->thumb = color(app, 0xb3, 0xa4, 0xc8);
     app->status_bg = color(app, 0xee, 0xe8, 0xf4);
     set_cursor(app, app->arrow);
     if (app->present) {
@@ -1680,7 +1489,9 @@ int main(int argc, char **argv)
             wpe_settings_set_uint32(wpe_settings, WPE_SETTING_CURSOR_BLINK_TIME, 0, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
             wpe_settings_set_boolean(wpe_settings, WPE_SETTING_DISABLE_ANIMATIONS, TRUE, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
         }
-        if (env_on("HELIOTROPE_NO_OVERLAY_SCROLLBARS"))
+        /* WebKit's own scrollbar, always shown (the overlay kind appears only
+         * while scrolling); HELIOTROPE_OVERLAY_SCROLLBARS=1 for that. */
+        if (!env_on("HELIOTROPE_OVERLAY_SCROLLBARS"))
             wpe_settings_set_boolean(wpe_settings, WPE_SETTING_OVERLAY_SCROLLBARS, FALSE, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
     }
     {
