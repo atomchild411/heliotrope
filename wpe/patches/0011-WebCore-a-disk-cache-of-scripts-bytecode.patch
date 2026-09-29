@@ -1,0 +1,199 @@
+From 10de31946eb8ff0978f0a3a1c0db0d2e2c8dbd1b Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 20:42:33 -0800
+Subject: [PATCH] WebCore: a disk cache of scripts' bytecode
+
+When WPE_BYTECODE_CACHE_DIR names a directory, a script loaded from the
+network keeps its compiled bytecode there, as JSC's shell does with
+--diskCachePath: one file per script URL and text, checked by JSC against
+the source before use. The top-level program is written as soon as it is
+compiled, since a Web process may be killed without its destructors
+running; functions compiled later join it when the provider goes away.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../bindings/js/CachedScriptSourceProvider.h  | 145 ++++++++++++++++++
+ 1 file changed, 145 insertions(+)
+
+diff --git a/Source/WebCore/bindings/js/CachedScriptSourceProvider.h b/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
+index 1abc013d..a901855e 100644
+--- a/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
++++ b/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
+@@ -29,7 +29,16 @@
+ #include "CachedResourceHandle.h"
+ #include "CachedScript.h"
+ #include "CachedScriptFetcher.h"
++#include <JavaScriptCore/BytecodeCacheError.h>
++#include <JavaScriptCore/CachedBytecode.h>
++#include <JavaScriptCore/CachedTypes.h>
+ #include <JavaScriptCore/SourceProvider.h>
++#include <JavaScriptCore/UnlinkedFunctionExecutable.h>
++#include <wtf/FileHandle.h>
++#include <wtf/RunLoop.h>
++#include <wtf/FileSystem.h>
++#include <wtf/Scope.h>
++#include <wtf/text/MakeString.h>
+ 
+ namespace WebCore {
+ 
+@@ -40,6 +49,7 @@ public:
+ 
+     virtual ~CachedScriptSourceProvider()
+     {
++        commitCachedBytecode();
+         m_cachedScript->removeClient(*this);
+     }
+ 
+@@ -55,6 +65,77 @@ public:
+         return m_cachedScript->codeBlockHashConcurrently(startOffset, endOffset, kind, isModuleType() ? CachedScript::ShouldDecodeAsUTF8Only::Yes : CachedScript::ShouldDecodeAsUTF8Only::No);
+     }
+ 
++    // A disk cache of the script's bytecode, in the directory named by
++    // WPE_BYTECODE_CACHE_DIR (none: no cache), as JSC's shell keeps one: the
++    // file is named by a hash of the script's text and its length (not its
++    // URL, so the same script behind other URLs or query strings shares it),
++    // and JSC checks the source it was made from before using it.
++    // WPE_BYTECODE_CACHE_DEBUG=1 logs reads and writes. The top-level program is
++    // written as soon as it is compiled (a Web process may be killed without
++    // its destructors running); functions compiled later join it two seconds
++    // after compiling starts (and again for later ones), and when this
++    // provider goes away.
++    RefPtr<JSC::CachedBytecode> cachedBytecode() const final
++    {
++        if (!m_cachedBytecode)
++            loadBytecode();
++        return m_cachedBytecode.copyRef();
++    }
++
++    void updateCache(const JSC::UnlinkedFunctionExecutable* executable, const JSC::SourceCode&, JSC::CodeSpecializationKind kind, const JSC::UnlinkedFunctionCodeBlock* codeBlock) const final
++    {
++        if (!m_cachedBytecode || bytecodeCacheDirectory().isNull())
++            return;
++        JSC::BytecodeCacheError error;
++        RefPtr<JSC::CachedBytecode> function = JSC::encodeFunctionCodeBlock(executable->vm(), codeBlock, error);
++        if (function && !error.isValid()) {
++            m_cachedBytecode->addFunctionUpdate(executable, kind, *function);
++            scheduleCommit();
++        }
++    }
++
++    void cacheBytecode(const JSC::BytecodeCacheGenerator& generator) const final
++    {
++        if (bytecodeCacheDirectory().isNull())
++            return;
++        if (!m_cachedBytecode)
++            m_cachedBytecode = JSC::CachedBytecode::create();
++        if (auto update = generator()) {
++            if (bytecodeCacheDebug())
++                WTFLogAlways("bytecode cache: compiled %s (%u bytes of source)", sourceURL().utf8().data(), source().length());
++            m_cachedBytecode->addGlobalUpdate(*update);
++            commitCachedBytecode();
++            loadBytecode(); // so functions compiled from now on are kept too
++        }
++    }
++
++    void commitCachedBytecode() const final
++    {
++        if (!m_cachedBytecode || !m_cachedBytecode->hasUpdates())
++            return;
++        auto clearBytecode = makeScopeExit([&] {
++            m_cachedBytecode = nullptr;
++        });
++        String path = bytecodeCachePath();
++        if (path.isNull())
++            return;
++        auto handle = FileSystem::openFile(path, FileSystem::FileOpenMode::ReadWrite, FileSystem::FileAccessPermission::User, { FileSystem::FileLockMode::Exclusive, FileSystem::FileLockMode::Nonblocking });
++        if (!handle)
++            return;
++        auto fileSize = handle.size();
++        size_t size;
++        if (!fileSize || !WTF::convertSafely(*fileSize, size) || size != m_cachedBytecode->size())
++            return; // someone else updated it
++        if (!handle.truncate(m_cachedBytecode->sizeForUpdate()))
++            return;
++        m_cachedBytecode->commitUpdates([&](off_t offset, std::span<const uint8_t> data) {
++            if (handle.seek(offset, FileSystem::FileSeekOrigin::Beginning))
++                handle.write(data);
++        });
++        if (bytecodeCacheDebug())
++            WTFLogAlways("bytecode cache: wrote %s (%zu bytes)", path.utf8().data(), m_cachedBytecode->sizeForUpdate());
++    }
++
+ private:
+     CachedScriptSourceProvider(CachedScript* cachedScript, JSC::SourceProviderSourceType sourceType, Ref<CachedScriptFetcher>&& scriptFetcher)
+         : SourceProvider(JSC::SourceOrigin { cachedScript->response().url(), WTF::move(scriptFetcher) }, String(cachedScript->response().url().string()), cachedScript->response().isRedirected() ? String(cachedScript->url().string()) : String(), cachedScript->requiresPrivacyProtections() ? JSC::SourceTaintedOrigin::KnownTainted : JSC::SourceTaintedOrigin::Untainted, TextPosition(), sourceType)
+@@ -63,7 +144,71 @@ private:
+         m_cachedScript->addClient(*this);
+     }
+ 
++    // Functions are compiled as the page runs; the Web process may be killed
++    // before this provider goes away, so write them two seconds after the
++    // first new one, then map the file again to keep adding to it.
++    void scheduleCommit() const
++    {
++        if (m_commitScheduled || !RunLoop::isMain())
++            return;
++        m_commitScheduled = true;
++        RunLoop::mainSingleton().dispatchAfter(2_s, [protectedThis = Ref { *this }] {
++            protectedThis->commitWhenQuiet();
++        });
++    }
++
++    void commitWhenQuiet() const
++    {
++        m_commitScheduled = false;
++        if (!m_cachedBytecode || !m_cachedBytecode->hasUpdates())
++            return;
++        commitCachedBytecode();
++        loadBytecode();
++    }
++
++    static bool bytecodeCacheDebug()
++    {
++        static bool debug = getenv("WPE_BYTECODE_CACHE_DEBUG");
++        return debug;
++    }
++
++    static const String& bytecodeCacheDirectory()
++    {
++        static NeverDestroyed<String> directory = [] {
++            const char* value = getenv("WPE_BYTECODE_CACHE_DIR");
++            return value && *value ? String::fromUTF8(value) : String();
++        }();
++        return directory.get();
++    }
++
++    String bytecodeCachePath() const
++    {
++        const String& directory = bytecodeCacheDirectory();
++        if (directory.isNull())
++            return { };
++        return FileSystem::pathByAppendingComponent(directory,
++            makeString(hex(hash(), 8), '-', source().length(), ".jsc"_s));
++    }
++
++    void loadBytecode() const
++    {
++        String path = bytecodeCachePath();
++        if (path.isNull())
++            return;
++        auto handle = FileSystem::openFile(path, FileSystem::FileOpenMode::Read, FileSystem::FileAccessPermission::User, { FileSystem::FileLockMode::Shared, FileSystem::FileLockMode::Nonblocking });
++        if (!handle)
++            return;
++        auto mapped = handle.map(FileSystem::MappedFileMode::Private);
++        if (!mapped)
++            return;
++        m_cachedBytecode = JSC::CachedBytecode::create(WTF::move(*mapped));
++        if (bytecodeCacheDebug())
++            WTFLogAlways("bytecode cache: read %s for %s", path.utf8().data(), sourceURL().utf8().data());
++    }
++
+     CachedResourceHandle<CachedScript> m_cachedScript;
++    mutable RefPtr<JSC::CachedBytecode> m_cachedBytecode;
++    mutable bool m_commitScheduled { false };
+ };
+ 
+ inline unsigned CachedScriptSourceProvider::hash() const
+-- 
+2.54.0 (Apple Git-157)
+

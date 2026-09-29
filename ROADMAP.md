@@ -250,6 +250,19 @@ by URL and source hash, in a heliotrope cache directory with a size cap.
 Helps repeat visits (first visits parse and write); parsing and bytecode
 were 21.5% of Google's Web-process CPU.
 
+**Bytecode cache, built 2026-09-28 (WebKit patch 0011):** WebCore's script
+provider keeps each script's bytecode in `~/.cache/heliotrope/bytecode`
+(keyed by the text's hash and length, not the URL; top level written at once,
+functions two seconds after they start compiling, since a Web process is
+killed without destructors; heliotrope trims the directory to 64 MB).
+Measured on atom with a page carrying Google's 1.1 MB bundle from a stable
+URL: parse + bytecode 3.3 s -> 0.8 s of CPU, the Web process 7.9 s -> 5.4 s,
+load 8.0 s -> 4.3 s. google.com itself cannot benefit: it serves that bundle
+with slightly different bytes on every load. `WPE_BYTECODE_CACHE_DEBUG=1`
+logs reads and writes. The HTTP cache (Cache-Control, Expires, revalidation)
+was already on; it now lives in `~/.cache/heliotrope` (it was in
+`~/.cache/wpe`, which can go).
+
 1. **MIPS n32 LLInt backend** (next big JavaScript-speed item, after the lean
    build and the memory work): revive offlineasm's MIPS backend from WebKit
    2.42 and port it to n32, big-endian, MIPS IV. Replaces the CLoop; no JIT,

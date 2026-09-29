@@ -26,6 +26,11 @@
  * the current site, the JS button JavaScript; both are remembered per site in
  * ~/.config/heliotrope/sites. HELIOTROPE_BLOCKLIST names another rule list.
  *
+ * Caches: WebKit's HTTP cache (it follows Cache-Control, Expires and
+ * revalidation) is in ~/.cache/heliotrope, and scripts' compiled bytecode in
+ * ~/.cache/heliotrope/bytecode, trimmed to HELIOTROPE_BYTECODE_CACHE_MB
+ * (default 64) at start; HELIOTROPE_NO_BYTECODE_CACHE=1 turns that off.
+ *
  * Memory: every site shares one Web process (HELIOTROPE_SITE_ISOLATION=1
  * gives each site its own, as WebKit does by default), caches are sized for
  * documents rather than a big browser, and WebKit is asked to shed caches
@@ -53,6 +58,7 @@
 #include <sys/ipc.h>
 #include <sys/resource.h>
 #include <sys/shm.h>
+#include <sys/stat.h>
 
 #ifndef BLOCKLIST_PATH
 #define BLOCKLIST_PATH "/opt/pkgsrc/share/heliotrope/blocklist.json"
@@ -1436,6 +1442,69 @@ static gboolean present_available(void)
     return yes;
 }
 
+/* --- compiled JavaScript kept on disk ---------------------------------------- */
+
+typedef struct {
+    char *path;
+    goffset size;
+    time_t used;
+} CacheFile;
+
+static int by_use(const void *a, const void *b)
+{
+    const CacheFile *x = a, *y = b;
+    return x->used < y->used ? -1 : x->used > y->used;
+}
+
+/* WebKit (patch 0011) keeps scripts' bytecode in WPE_BYTECODE_CACHE_DIR, one
+ * file per script version; trim it to HELIOTROPE_BYTECODE_CACHE_MB (default
+ * 64), the files used longest ago first. HELIOTROPE_NO_BYTECODE_CACHE=1: none. */
+static void setup_bytecode_cache(void)
+{
+    const char *mb = getenv("HELIOTROPE_BYTECODE_CACHE_MB");
+    goffset limit = (goffset)(mb && atoi(mb) > 0 ? atoi(mb) : 64) << 20, total = 0;
+    char *dir;
+    GDir *d;
+    const char *name;
+    GArray *files;
+    guint i;
+
+    if (env_on("HELIOTROPE_NO_BYTECODE_CACHE"))
+        return;
+    dir = g_build_filename(g_get_user_cache_dir(), "heliotrope", "bytecode", NULL);
+    if (g_mkdir_with_parents(dir, 0700) != 0) {
+        g_free(dir);
+        return;
+    }
+    g_setenv("WPE_BYTECODE_CACHE_DIR", dir, TRUE);
+    files = g_array_new(FALSE, FALSE, sizeof(CacheFile));
+    if ((d = g_dir_open(dir, 0, NULL))) {
+        while ((name = g_dir_read_name(d))) {
+            CacheFile f;
+            struct stat st;
+            f.path = g_build_filename(dir, name, NULL);
+            if (stat(f.path, &st) != 0 || !S_ISREG(st.st_mode)) {
+                g_free(f.path);
+                continue;
+            }
+            f.size = st.st_size;
+            f.used = st.st_atime > st.st_mtime ? st.st_atime : st.st_mtime;
+            total += f.size;
+            g_array_append_val(files, f);
+        }
+        g_dir_close(d);
+    }
+    g_array_sort(files, by_use);
+    for (i = 0; i < files->len; i++) {
+        CacheFile *f = &g_array_index(files, CacheFile, i);
+        if (total > limit && g_unlink(f->path) == 0)
+            total -= f->size;
+        g_free(f->path);
+    }
+    g_array_free(files, TRUE);
+    g_free(dir);
+}
+
 int main(int argc, char **argv)
 {
     App app = { 0 };
@@ -1465,6 +1534,9 @@ int main(int argc, char **argv)
     app.home = g_strdup(getenv("HELIOTROPE_HOME") ? getenv("HELIOTROPE_HOME") : url);
     app.timing = env_on("HELIOTROPE_TIMING");
     raise_descriptor_limit();
+    /* WebKit's caches (HTTP, HSTS) then live under ~/.cache/heliotrope */
+    g_set_prgname("heliotrope");
+    setup_bytecode_cache();
 
     app.edit = g_string_new(NULL);
     app.present = present_available();
