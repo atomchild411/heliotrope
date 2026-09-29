@@ -10,6 +10,12 @@
  * a textured quad (GL_REPLACE), opacity (GL_MODULATE + blending), stencil
  * clipping, Cairo's big-endian ARGB fixed at upload by SGI_color_matrix, and
  * the fill rate of a 512x512 textured quad.
+ *
+ * Build against IRIX's OpenGL headers (the cross sysroot's GL/ holds IRIS GL
+ * ones) and IRIX's own libX11.so.1 -- the libGL on IRIX links that one, not
+ * pkgsrc's libX11.so.6:
+ *   clang --target=mips64-sgi-irix6.5 -march=mips4 -mtune=r10000 --sysroot=$S \
+ *     -I<OpenGL headers> -O2 -o glcaps glcaps.c -L<IRIX libGL + libX11> -lGL -lX11
  */
 
 #include <X11/Xlib.h>
