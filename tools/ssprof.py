@@ -74,7 +74,16 @@ def symbols(lib):
     return addrs, names
 
 
+TEXT = re.compile(r"WebCore::(Font|FontCascade|FontCache|FontPlatformData|FontRanges|FontSelector|CSSFontSelector|"
+                  r"Glyph|WidthIterator|ComplexText|TextRun|TextBreakIterator|CachedLineBreakIterator|"
+                  r"LazyLineBreakIterator|TextPainter|SimpleFontData|FontFamily|FontDescription|"
+                  r"Layout::TextUtil|Layout::InlineTextItem|TextBoxPainter|SurrogatePair|FontVariant|"
+                  r"HarfBuzz|Cairo.*Font|FontCustomPlatformData|SkiaHarfBuzz|OpenType)|hb_|FT_|Fc[A-Z]")
+
+
 def area(name):
+    if TEXT.search(name):
+        return "text: fonts, shaping, measuring, drawing glyphs"
     if "CLoop::execute" in name:
         return "JS interpreter (CLoop::execute)"
     if re.search(r"JSC::LLInt::|llint_|slow_path|JSC::CommonSlowPaths", name):

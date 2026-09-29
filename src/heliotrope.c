@@ -1572,6 +1572,16 @@ int main(int argc, char **argv)
         WebKitMemoryPressureSettings *pressure = webkit_memory_pressure_settings_new();
         WebKitWebContext *context;
         app.content_manager = webkit_user_content_manager_new();
+        if (env_on("HELIOTROPE_FAST_TEXT")) {
+            /* WPE shapes all text with HarfBuzz unless text-rendering is
+             * optimizeSpeed; this measures plain text with the fast path
+             * (no kerning; fonts that ask for features are still shaped). */
+            WebKitUserStyleSheet *fast = webkit_user_style_sheet_new(
+                "* { text-rendering: optimizeSpeed !important; }",
+                WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES, WEBKIT_USER_STYLE_LEVEL_USER, NULL, NULL);
+            webkit_user_content_manager_add_style_sheet(app.content_manager, fast);
+            webkit_user_style_sheet_unref(fast);
+        }
         webkit_memory_pressure_settings_set_memory_limit(pressure, mb);
         webkit_memory_pressure_settings_set_conservative_threshold(pressure, 0.33);
         webkit_memory_pressure_settings_set_strict_threshold(pressure, 0.5);
@@ -1582,11 +1592,29 @@ int main(int argc, char **argv)
             NULL));
         webkit_memory_pressure_settings_free(pressure);
         webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_DOCUMENT_BROWSER);
+        /* Test mode (HELIOTROPE_PROXY, below): no disk cache, so every run
+         * loads everything through the proxy and runs compare. */
+        WebKitNetworkSession *test_session = getenv("HELIOTROPE_PROXY") && *getenv("HELIOTROPE_PROXY")
+            ? webkit_network_session_new_ephemeral() : NULL;
         app.web_view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW, "display", display,
-            "web-context", context, "user-content-manager", app.content_manager, NULL));
+            "web-context", context, "user-content-manager", app.content_manager,
+            test_session ? "network-session" : NULL, test_session, NULL));
+        g_clear_object(&test_session);
         g_object_unref(context);
     }
     g_object_unref(display);
+    /* Test mode, for measuring without the network: every load goes through
+     * HELIOTROPE_PROXY (tools/replayproxy.py, which records a site once and
+     * plays it back) and TLS certificate errors are ignored so the proxy can
+     * read HTTPS. Never for ordinary browsing. */
+    if (getenv("HELIOTROPE_PROXY") && *getenv("HELIOTROPE_PROXY")) {
+        WebKitNetworkSession *session = webkit_web_view_get_network_session(app.web_view);
+        WebKitNetworkProxySettings *proxy = webkit_network_proxy_settings_new(getenv("HELIOTROPE_PROXY"), NULL);
+        webkit_network_session_set_proxy_settings(session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxy);
+        webkit_network_proxy_settings_free(proxy);
+        webkit_network_session_set_tls_errors_policy(session, WEBKIT_TLS_ERRORS_POLICY_IGNORE);
+        g_printerr("heliotrope: TEST MODE: all loads through %s, TLS errors ignored, no disk cache\n", getenv("HELIOTROPE_PROXY"));
+    }
     /* WebKit features to switch on: redraw only what changed (damage tracking,
      * off by default in WPE; a full frame costs seconds in software GL, a
      * keystroke's worth a fraction of one; HELIOTROPE_NO_DAMAGE=1 turns it off),
