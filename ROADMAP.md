@@ -206,12 +206,13 @@ seb/seh, 3-operand mul, rotr; big-endian) as it was.
 
 ## Decisions pending
 
-- **Replace softpipe** (compositing now runs on Mesa's software rasterizer,
-  which keeps textures in main memory too). Options: llvmpipe (needs LLVM's
-  JIT on IRIX); host GL through our libGL shim on the emulator (EGL on the
-  shim); on real SGI hardware native GL has no shaders (IMPACT, VPro are
-  fixed function), so WebKit's TextureMapper cannot use it directly. Decide
-  together with item 8.
+- None on rendering. **Softpipe goes, decided 2026-09-28:** irix-egl-gles
+  replaces it everywhere, and llvmpipe is off the table. The rule for all of
+  our pkgsrc is no software GL (Mesa softpipe or llvmpipe) at all: draw
+  through IRIX's libGL.so, or stop and say why
+  (`notes/irix-porting-lore.md`, "Graphics"). Today's Mesa-based
+  build is a stopgap for development on atom until irix-egl-gles works;
+  it is not what testers get.
 
 ## Later
 
