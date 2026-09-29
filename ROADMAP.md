@@ -94,6 +94,34 @@ uploads and readback, ~9-15% shader and state setup.
 Page loads are unchanged by 1-2 (Google ~72 s, Wikipedia ~47 s): each still
 needs 2-3 full frames, plus JavaScript (Google ~45 s) and 8-13 s of startup.
 
+## Plan: irix-egl-gles (decided with the user, 2026-09-28)
+
+Everything accelerated or not goes through IRIX's own libGL.so: real
+accelerated boards (hardware OpenGL), unaccelerated ones (SGI's software
+OpenGL, e.g. REX3/Newport), and iris (the guest-tools libGL.so shim onto the
+Mac's OpenGL). So:
+1. **irix-egl-gles**: an IRIX-only pkgsrc package depending only on libGL.so
+   and GLX, installing Khronos-named libEGL.so.1 and libGLESv2.so.2. It
+   implements the ~102 GLES/EGL calls WebKit uses, maps WebKit's compositing
+   shaders to fixed-function state (textured quads; GL_MODULATE + colour for
+   opacity; stencil for rounded clips), emulates render targets with GLX
+   pbuffers (no FBOs in GL 1.1), pads textures to powers of two, and handles
+   Cairo's ARGB byte order at upload (no GL_BGRA: SGI_color_matrix during the
+   upload, or a CPU swap). Blur and filter effects need a WebKit-side answer.
+2. **libepoxy** picks the EGL/GLES implementation at run time (irix-egl-gles
+   by default on IRIX).
+3. **heliotrope's own X11 WPE platform**, so WebKit composites straight into
+   the window (no readback, no shared-memory copy).
+4. **Mesa** is then not needed for heliotrope.
+
+atom's libGL (the shim, 2026-09-28 glxinfo): OpenGL 1.1 "IRIS host OpenGL",
+GLX 1.2 with SGIX_fbconfig + SGIX_pbuffer, IMPACT-like extensions
+(EXT_packed_pixels, EXT_abgr, SGI_color_matrix, ARB_multitexture,
+EXT_texture_object, EXT_subtexture, SGIS_texture_edge_clamp, blend
+extensions), 24-bit TrueColor visuals with 8-bit alpha and 8-bit stencil;
+no EXT_bgra. Still to query: max texture size, texture memory, pbuffer limits
+(here and on real boards).
+
 ## Compensation mode (later)
 
 A setting: in compensation mode the page's JavaScript is off and
