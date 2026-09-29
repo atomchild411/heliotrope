@@ -1,0 +1,71 @@
+From 7edd7dba35f02ebfdf3a026af55f6890c46ed77e Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 18:49:05 -0800
+Subject: [PATCH] TextureMapper: upload Cairo ARGB32 as is where GL can take it
+ (big-endian)
+
+With GL_IRIX_texture_format_ARGB32 (irix-egl-gles on IRIX), glTexSubImage2D
+takes GL_BGRA_EXT / GL_UNSIGNED_INT_8_8_8_8_REV: 32-bit words 0xAARRGGBB,
+which is what Cairo's ARGB32 is on any byte order. The shader then needs no
+colour-reordering matrix, which fixed-function OpenGL cannot apply.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../graphics/texmap/BitmapTexture.cpp         | 27 ++++++++++++++++++-
+ 1 file changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/Source/WebCore/platform/graphics/texmap/BitmapTexture.cpp b/Source/WebCore/platform/graphics/texmap/BitmapTexture.cpp
+index 0de85c16..7aaaca84 100644
+--- a/Source/WebCore/platform/graphics/texmap/BitmapTexture.cpp
++++ b/Source/WebCore/platform/graphics/texmap/BitmapTexture.cpp
+@@ -60,6 +60,21 @@ static const GLenum s_pixelDataType = GL_UNSIGNED_BYTE;
+ 
+ constexpr GLenum textureFormat = GL_RGBA;
+ 
++#if CPU(BIG_ENDIAN)
++// With GL_IRIX_texture_format_ARGB32 (irix-egl-gles on IRIX), GL takes Cairo's
++// ARGB32 words as they are (GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV), so no
++// colour reordering is left for the shader, which fixed-function GL cannot do.
++static bool uploadsNativeARGB32()
++{
++    static int supported = -1;
++    if (supported < 0) {
++        const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
++        supported = WebCore::GLContext::isExtensionSupported(extensions, "GL_IRIX_texture_format_ARGB32");
++    }
++    return supported;
++}
++#endif
++
+ // On GLES3, the format we want for packed depth stencil is GL_DEPTH24_STENCIL8, but when added through
+ // the extension this format is called GL_DEPTH24_STENCIL8_OES. In any case they hold the same value 0x88F0
+ // so we can just use the first one.
+@@ -326,7 +341,15 @@ void BitmapTexture::updateContents(const void* srcData, const IntRect& targetRec
+         glPixelStorei(GL_UNPACK_SKIP_PIXELS, adjustedSourceOffset.x());
+     }
+ 
+-    glTexSubImage2D(GL_TEXTURE_2D, 0, targetRect.x(), targetRect.y(), targetRect.width(), targetRect.height(), textureFormat, s_pixelDataType, data);
++    GLenum uploadFormat = textureFormat;
++    GLenum uploadType = s_pixelDataType;
++#if CPU(BIG_ENDIAN)
++    if (m_pixelFormat == PixelFormat::BGRA8 && uploadsNativeARGB32()) {
++        uploadFormat = 0x80E1; // GL_BGRA_EXT
++        uploadType = 0x8367; // GL_UNSIGNED_INT_8_8_8_8_REV
++    }
++#endif
++    glTexSubImage2D(GL_TEXTURE_2D, 0, targetRect.x(), targetRect.y(), targetRect.width(), targetRect.height(), uploadFormat, uploadType, data);
+ 
+     if (supportsUnpackSubimage) {
+         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+@@ -534,6 +557,8 @@ OptionSet<TextureMapperFlags> BitmapTexture::colorConvertFlags() const
+ #if CPU(LITTLE_ENDIAN)
+     return TextureMapperFlags::ShouldConvertTextureBGRAToRGBA;
+ #else
++    if (uploadsNativeARGB32())
++        return { };
+     return TextureMapperFlags::ShouldConvertTextureARGBToRGBA;
+ #endif
+ }
+-- 
+2.54.0 (Apple Git-157)
+

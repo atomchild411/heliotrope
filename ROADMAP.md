@@ -141,6 +141,26 @@ cases into a pbuffer. atom, 2026-09-28 (`tools/glcaps-atom-2026-09-28.txt`):
   current (GLX allows it; `notes/gl-discrepancies.md` #13). irix-egl-gles
   should make a context current before its first pbuffer anyway, so it runs
   on both.
+**Built 2026-09-28** (`code/irix-egl-gles`, e43191d; local repo): heliotrope
+renders on it on atom, through libepoxy's `EPOXY_EGL_LIB` / `EPOXY_GLES2_LIB`
+(libepoxy nb3) beside Mesa, with WebKit patch 0009 (Cairo ARGB32 uploaded as
+`GL_IRIX_texture_format_ARGB32`, no colour matrix in the shader).
+
+| atom, lean build | Mesa softpipe | irix-egl-gles |
+|---|---|---|
+| test page: first frame with content | 18.8 s | 3.0 s |
+| Wikipedia IRIX: load finished | ~47 s | 36 s |
+| Google: load finished | ~72 s | 51 s |
+| Wikipedia: Web process private | 100.5 MB | 75.1 MB |
+| Google: Web process private | 116.9 MB | 84.6 MB |
+
+Wikipedia and Google draw identically to Mesa; neither needs a shader option
+the layer lacks. Still to do in the recipe: CSS colour filters (planned: the
+SGI colour matrix on a glCopyPixels of the drawn region), antialiased edges of
+transformed layers, rounded-rectangle clips (stencil), blurs and shadows
+(EXT_convolution where present). Box shadows are missing with Mesa too
+(WebKit/Cairo on IRIX, separate).
+
 **Decided 2026-09-28: irix-egl-gles adapts at run time.** We have no real
 SGI hardware; testers ("friends") will run it on theirs. So nothing is
 tuned per board by hand. At eglInitialize, once per display, it probes
