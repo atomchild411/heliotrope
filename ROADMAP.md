@@ -119,8 +119,28 @@ GLX 1.2 with SGIX_fbconfig + SGIX_pbuffer, IMPACT-like extensions
 (EXT_packed_pixels, EXT_abgr, SGI_color_matrix, ARB_multitexture,
 EXT_texture_object, EXT_subtexture, SGIS_texture_edge_clamp, blend
 extensions), 24-bit TrueColor visuals with 8-bit alpha and 8-bit stencil;
-no EXT_bgra. Still to query: max texture size, texture memory, pbuffer limits
-(here and on real boards).
+no EXT_bgra.
+
+`tools/glcaps.c` (libGL + GLX + X11 only; run `DISPLAY=:0 glcaps` on any
+IRIX machine) measures what glxinfo does not and renders the compositing
+cases into a pbuffer. atom, 2026-09-28 (`tools/glcaps-atom-2026-09-28.txt`):
+- limits: GL_MAX_TEXTURE_SIZE 16384 (proxy accepts RGBA8 up to 8192),
+  8 texture units, pbuffers up to 4096x4096 in every RGBA8+stencil config,
+  8-bit alpha and stencil in the pbuffer;
+- texture memory: all 64 MB probed stayed resident (the Mac GPU; real
+  IMPACT has 1-4 MB of TRAM, so this is the number to rerun on hardware);
+- speed: upload ~930 MB/s, 512x512 glTexSubImage2D 1.0 ms, 512x512
+  glReadPixels 6.5 ms;
+- all compositing checks pass: textured quad (GL_REPLACE), opacity via
+  GL_MODULATE + premultiplied blend (128,0,0,128 at 0.5), stencil clip, and
+  **Cairo's big-endian ARGB made right during the upload by SGI_color_matrix**
+  (so no CPU swap is needed where the extension exists).
+- one shim difference: iris's libGL cannot create a pbuffer with no context
+  current (GLX allows it; `notes/gl-discrepancies.md` #13). irix-egl-gles
+  should make a context current before its first pbuffer anyway, so it runs
+  on both.
+Still to do: run glcaps on real boards (IMPACT, VPro, O2, and REX3 for
+SGI's software GL).
 
 ## Compensation mode (later)
 

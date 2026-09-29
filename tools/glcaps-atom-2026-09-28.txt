@@ -1,0 +1,32 @@
+GLX 1.2
+pbuffer configs with RGBA8 + stencil: 4
+  config 0: max pbuffer 4096x4096 (16777216 pixels), alpha 8, stencil 8, depth 24, double 1
+  config 1: max pbuffer 4096x4096 (16777216 pixels), alpha 8, stencil 8, depth 24, double 1
+  config 2: max pbuffer 4096x4096 (16777216 pixels), alpha 8, stencil 8, depth 24, double 1
+  config 3: max pbuffer 4096x4096 (16777216 pixels), alpha 8, stencil 8, depth 24, double 0
+NOTE: pbuffer creation with no current context failed; retrying with a context current
+      with a context current: ok
+
+GL_VENDOR   IRIS
+GL_RENDERER IRIS host OpenGL
+GL_VERSION  1.1 IRIS
+GL_MAX_TEXTURE_SIZE 16384 (largest RGBA8 accepted by proxy: 8192)
+GL_MAX_TEXTURE_UNITS_ARB 8
+GL_MAX_VIEWPORT_DIMS 16384x16384
+GL_ALPHA_BITS 8  GL_STENCIL_BITS 8
+extensions this layer would use: packed_pixels yes, abgr yes, bgra no, color_matrix yes, edge_clamp yes, texture_object yes, subtexture yes
+
+texture memory: 64 of 64 512x512 RGBA textures resident at once (64 MB)
+upload: 64 x 1 MB in 0.07 s = 932.9 MB/s
+glTexSubImage2D 512x512: 1.0 ms each
+
+compositing checks (render into the pbuffer, read back):
+  textured quad, GL_REPLACE                                  ok  red corner = 255,0,0,255
+    other corner (white)                                     ok
+  opacity 0.5 (GL_MODULATE, premultiplied blend)             ok  = 128,0,0,128
+  stencil clip                                               ok  inside 255,0,0  outside 0,0,0
+  ARGB upload fixed by SGI_color_matrix                      ok  red 255,0,0,255 green 0,255,0,255
+  fill rate: 512x512 textured quad in 0.03 ms = 8553.2 Mpixel/s
+  readback: 512x512 glReadPixels in 6.5 ms
+
+all compositing checks passed
