@@ -1,0 +1,13 @@
+lnb-wiki: loaded after ~60s, measured 30s later
+  heliotrop          resident   35120  private    8032  heap     176  webkit   3216  other    4640
+  WPENetwor          resident   47920  private   24144  heap    8256  webkit   8432  other    7456
+  WPEWebPro          resident  127712  private   95152  heap   27312  webkit  36128  other   31712
+lnb-github: loaded after ~175s, measured 30s later
+  heliotrop          resident   35072  private    7984  heap     176  webkit   3200  other    4608
+  WPENetwor          resident   42320  private   18544  heap    1728  webkit   8368  other    8448
+  WPEWebPro          resident  176656  private  143952  heap   57008  webkit  37648  other   49296
+lnb-google: loaded after ~75s, measured 30s later
+  heliotrop          resident   35264  private    7920  heap     176  webkit   3136  other    4608
+  WPENetwor          resident   46496  private   22480  heap    6384  webkit   8448  other    7648
+  WPEWebPro          resident  140288  private  107456  heap   34128  webkit  38688  other   34640
+PHASE-DONE

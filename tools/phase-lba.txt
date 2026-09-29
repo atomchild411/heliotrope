@@ -1,0 +1,21 @@
+lba-wiki: loaded after ~55s, measured 30s later
+  heliotrop          resident   35328  private    8080  heap     176  webkit   3168  other    4736
+  WPENetwor          resident   46960  private   23168  heap    7296  webkit   8416  other    7456
+  WPEWebPro          resident  126976  private   94288  heap   26416  webkit  36160  other   31712
+heliotrope: block list ready (0.0 s)
+CONSOLE NETWORK INFO Successfully preconnected to https://thumb.wikimedia.org/
+lba-github: loaded after ~55s, measured 30s later
+  heliotrop          resident   33792  private    8128  heap     176  webkit   3216  other    4736
+  WPENetwor          resident   45440  private   21664  heap    4496  webkit   8384  other    8784
+  WPEWebPro          resident  140784  private  109648  heap   43632  webkit  34528  other   31488
+heliotrope: block list ready (0.0 s)
+CONSOLE SECURITY ERROR Unrecognized Content-Security-Policy directive 'manifest-src'.
+
+CONSOLE NETWORK INFO Successfully preconnected to https://avatars.githubusercontent.com/
+CONSOLE NETWORK INFO Successfully preconnected to https://github.githubassets.com/
+lba-google: loaded after ~85s, measured 30s later
+  heliotrop          resident   35504  private    8032  heap     176  webkit   3152  other    4704
+  WPENetwor          resident   47552  private   23552  heap    7488  webkit   8416  other    7648
+  WPEWebPro          resident  141216  private  108256  heap   34992  webkit  38896  other   34368
+heliotrope: block list ready (0.0 s)
+PHASE-DONE

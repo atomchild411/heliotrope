@@ -39,9 +39,29 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
   113 MB for the Web process). MIPS IV stays the target (user: MIPS III not
   a concern). The memalign "2x" was untouched padding, never resident.
 - JSC heap tuning (8 MB threshold, slower growth): about -4 MB on GitHub.
-- Next: the lean build (lean.sh: -Os, -fomit-frame-pointer, --icf=safe, and
-  geolocation, notifications, pdf.js, smooth scrolling, touch, MHTML,
-  offscreen canvas, image-diff off), with blocking off and on.
+- **Lean build** (lean.sh: -Os, -fomit-frame-pointer, --icf=safe; geolocation,
+  notifications, pdf.js, smooth scrolling, touch, MHTML, offscreen canvas,
+  image-diff off): the default now. Web process 92 / 141 / 105 MB (Wikipedia /
+  GitHub / Google), 6-25 MB less than -O2; GitHub loads in ~175 s instead of
+  ~215 s, the others unchanged; libWPEWebKit 82 MB stripped instead of 104,
+  package 25.5 MB instead of 32.5. tools/phase-*.txt hold every run.
+- Blocking: these three pages load nothing on Peter Lowe's list (0 blocked;
+  the blocker itself verified on a test page). Add ad-heavy pages (a news
+  site, a recipe blog) to the benchmark to measure it.
+
+## Compensation mode (later)
+
+A setting: in compensation mode the page's JavaScript is off and
+compensation rendering comes in, so JS-dependent sites still look right.
+Sketch (not designed yet): WPE's `enable-javascript-markup=FALSE` blocks the
+page's own scripts while browser-injected user scripts still run in an
+isolated world, so heliotrope can add one small fix-up script plus a
+stylesheet: lazy images (`data-src`/`data-srcset` -> `src`/`srcset`),
+content hidden for fade-in effects made visible, full-screen overlays
+(cookie walls, "loading") hidden and scrolling restored; `<noscript>` content
+shown (check WebKit still does this with markup off). Related: a "calm"
+stylesheet that turns off CSS animations and transitions (every frame is a
+full repaint here), per-site fixes, and an on-demand reader mode.
 
 ## JavaScript speed: replacing the CLoop
 

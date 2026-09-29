@@ -1,0 +1,13 @@
+lna-wiki: loaded after ~60s, measured 30s later
+  heliotrop          resident   35104  private    8016  heap     176  webkit   3200  other    4640
+  WPENetwor          resident   47424  private   23664  heap    6528  webkit   8432  other    8704
+  WPEWebPro          resident  126080  private   93520  heap   26416  webkit  36112  other   30992
+lna-github: loaded after ~175s, measured 30s later
+  heliotrop          resident   35104  private    8016  heap     176  webkit   3200  other    4640
+  WPENetwor          resident   52576  private   28736  heap   11632  webkit   8368  other    8736
+  WPEWebPro          resident  177328  private  144608  heap   56928  webkit  37664  other   50016
+lna-google: loaded after ~80s, measured 30s later
+  heliotrop          resident   35280  private    7936  heap     176  webkit   3152  other    4608
+  WPENetwor          resident   47744  private   23696  heap    6048  webkit   8432  other    9216
+  WPEWebPro          resident  139424  private  106624  heap   32816  webkit  38784  other   35024
+PHASE-DONE
