@@ -108,11 +108,13 @@ Mac's OpenGL). So:
    pbuffers (no FBOs in GL 1.1), pads textures to powers of two, and handles
    Cairo's ARGB byte order at upload (no GL_BGRA: SGI_color_matrix during the
    upload, or a CPU swap). Blur and filter effects need a WebKit-side answer.
-2. **libepoxy** picks the EGL/GLES implementation at run time (irix-egl-gles
-   by default on IRIX).
+2. **libepoxy** stays (WebKit calls GL through it) and loads irix-egl-gles's
+   libEGL.so.1 / libGLESv2.so.2; there is no second implementation to pick.
 3. **heliotrope's own X11 WPE platform**, so WebKit composites straight into
    the window (no readback, no shared-memory copy).
-4. **Mesa** is then not needed for heliotrope.
+4. **Mesa** is then not needed for heliotrope, and is not a fallback
+   (decided 2026-09-28): on a machine irix-egl-gles cannot drive, heliotrope
+   stops and says why.
 
 atom's libGL (the shim, 2026-09-28 glxinfo): OpenGL 1.1 "IRIS host OpenGL",
 GLX 1.2 with SGIX_fbconfig + SGIX_pbuffer, IMPACT-like extensions
@@ -150,12 +152,20 @@ tuned per board by hand. At eglInitialize, once per display, it probes
   extension string alone is not trusted;
 - **pbuffers**: always make a context current first (works on GLX and on
   the iris shim); if no RGBA8 + alpha + stencil pbuffer config exists (e.g.
-  8-bit Indy XL), eglInitialize fails and libepoxy falls back to Mesa;
+  8-bit Indy XL), eglInitialize fails with a reason;
 - **texture memory** is managed rather than measured: textures are kept in
   an LRU with a budget, glAreTexturesResident after uploads, and the budget
   shrinks when residency drops (1-4 MB TRAM on IMPACT, unlimited in iris);
 - **power-of-two padding** always (GL 1.1), unless
   ARB_texture_non_power_of_two appears.
+
+**No Mesa fallback; fail clearly** (user, 2026-09-28): falling back to Mesa
+on SGI hardware would mean the browser is unusable anyway. Heliotrope
+initialises EGL in its own process at startup, before starting WebKit, and
+if that fails it exits with the reason irix-egl-gles gives (for example "no
+24-bit RGBA pbuffer with alpha and stencil on this display"). The message
+goes to stderr and into an X window, since it may be started from the
+toolchest with no terminal. The Web process never falls back silently.
 
 For testers: `IRIX_EGL_DEBUG=1` prints what was probed and which path was
 chosen, and the package ships glcaps (as `egl-gles-info`) so a tester runs
