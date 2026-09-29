@@ -49,6 +49,36 @@ later; shortlist: Heliotrope, Tyrian, Amaranth, Aperture).
   the blocker itself verified on a test page). Add ad-heavy pages (a news
   site, a recipe blog) to the benchmark to measure it.
 
+## Rendering: three kinds of machine
+
+Where the time goes (2026-09-28, SpeedShop on the Web process): 74% in Mesa
+softpipe interpreting WebKit's compositing shader per pixel, ~4 s per full
+620x640 frame on atom; Cairo/pixman painting only ~1.5%.
+
+| Machine | Compositing path | Notes |
+|---|---|---|
+| **In iris (emulator)** | host GL passthrough (Mac GPU) or the CPU compositor (3b) | the software-GL items below may not matter here |
+| **Real SGI, accelerated** (IMPACT, VPro, Octane, InfiniteReality) | 3b; later maybe a fixed-function OpenGL 1.x compositor | no shaders, so TextureMapper can't use the hardware as is; small texture memory (IMPACT 1-4 MB) |
+| **Real SGI, unaccelerated** (Indy XL/XZ, Indigo2 XL, some O2) | 3b | many are 8-bit: heliotrope needs a dithering path (today it requires 24-bit TrueColor) |
+
+**Software-GL path items** (done 2026-09-28; they matter while the Web process
+composites with softpipe; revisit per machine class):
+1. No gratuitous repaints: no caret blink or animations (heliotrope), tile
+   pre-painting in one pass over the visible area (WebKit patch 0008). Idle
+   pages stop repainting (before: forever, ~4 s a frame).
+2. Damage tracking on (heliotrope): small updates ~0.3 s a frame instead of
+   ~3.8 s.
+3. **Next, under discussion:** 3a, a copy fast path inside the GL compositor
+   (tiles byte-swapped to RGBA at upload, plain copies instead of the shader);
+   or 3b, a CPU compositor for the shared-memory path (tiles composited from
+   their Cairo images with pixman, no GL, no Mesa in the Web process).
+   Recommendation: 3b.
+4. llvmpipe (see Decisions pending): needs LLVM's JIT on IRIX and loads
+   libLLVM into every Web process.
+
+Page loads are unchanged by 1-2 (Google ~72 s, Wikipedia ~47 s): each still
+needs 2-3 full frames, plus JavaScript (Google ~45 s) and 8-13 s of startup.
+
 ## Compensation mode (later)
 
 A setting: in compensation mode the page's JavaScript is off and
