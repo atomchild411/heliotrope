@@ -239,6 +239,17 @@ another 5600). Bigger levers first: -O2 instead of -Os for WebCore and JSC,
 JSC's bytecode disk cache (parsing is 21.5% on Google), a faster allocator
 than IRIX malloc, and fewer fontconfig/lfmt calls.
 
+**Bytecode cache, measured 2026-09-28** (jsc shell from our 2.52.6 build on
+atom, `--diskCachePath`): Google's 1.1 MB main bundle takes 2.65 s to parse
+and compile, 0.68 s from the cache (-75%), same output; the cache file is 3.4
+MB (3x the source, mapped, so clean pages). WebKit wires this cache only into
+the jsc shell and Apple's JSScript API: web pages need a patch giving
+WebCore's script source providers `cachedBytecode()` / `updateCache()` /
+`commitCachedBytecode()` like jsc's ShellSourceProvider (~120 lines), keyed
+by URL and source hash, in a heliotrope cache directory with a size cap.
+Helps repeat visits (first visits parse and write); parsing and bytecode
+were 21.5% of Google's Web-process CPU.
+
 1. **MIPS n32 LLInt backend** (next big JavaScript-speed item, after the lean
    build and the memory work): revive offlineasm's MIPS backend from WebKit
    2.42 and port it to n32, big-endian, MIPS IV. Replaces the CLoop; no JIT,
