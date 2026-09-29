@@ -139,8 +139,27 @@ cases into a pbuffer. atom, 2026-09-28 (`tools/glcaps-atom-2026-09-28.txt`):
   current (GLX allows it; `notes/gl-discrepancies.md` #13). irix-egl-gles
   should make a context current before its first pbuffer anyway, so it runs
   on both.
-Still to do: run glcaps on real boards (IMPACT, VPro, O2, and REX3 for
-SGI's software GL).
+**Decided 2026-09-28: irix-egl-gles adapts at run time.** We have no real
+SGI hardware; testers ("friends") will run it on theirs. So nothing is
+tuned per board by hand. At eglInitialize, once per display, it probes
+(a few milliseconds) and picks a path:
+- **max texture size** from proxy textures, not GL_MAX_TEXTURE_SIZE (the
+  shim says 16384, the proxy stops at 8192);
+- **ARGB upload**: a 2x2 upload through SGI_color_matrix, read back and
+  timed; wrong or slow (the matrix done in software) means the CPU swap. The
+  extension string alone is not trusted;
+- **pbuffers**: always make a context current first (works on GLX and on
+  the iris shim); if no RGBA8 + alpha + stencil pbuffer config exists (e.g.
+  8-bit Indy XL), eglInitialize fails and libepoxy falls back to Mesa;
+- **texture memory** is managed rather than measured: textures are kept in
+  an LRU with a budget, glAreTexturesResident after uploads, and the budget
+  shrinks when residency drops (1-4 MB TRAM on IMPACT, unlimited in iris);
+- **power-of-two padding** always (GL 1.1), unless
+  ARB_texture_non_power_of_two appears.
+
+For testers: `IRIX_EGL_DEBUG=1` prints what was probed and which path was
+chosen, and the package ships glcaps (as `egl-gles-info`) so a tester runs
+one command and pastes the output back.
 
 ## Compensation mode (later)
 
