@@ -1,0 +1,110 @@
+From e9a6d881cdb7d478878a56543479431dfd1fe468 Mon Sep 17 00:00:00 2001
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Mon, 28 Sep 2026 16:54:32 -0800
+Subject: [PATCH] Coordinated tiles: configurable coverage, created in one pass
+
+Painting tiles beyond the viewport ring by ring costs one full composite per
+ring; where every composite is expensive (software GL: ~4 s a frame on an
+R10000) a static tall page kept repainting for half a minute.
+WEBKIT_TILE_COVER_MULTIPLIER sets how far beyond the viewport tiles are
+painted ahead (2 by default, 1 on IRIX), and WEBKIT_TILES_ONE_PASS=1 creates
+every missing tile at once (default on IRIX).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../CoordinatedBackingStoreProxy.cpp          | 44 +++++++++++++++++--
+ .../CoordinatedBackingStoreProxy.h            |  2 +
+ 2 files changed, 43 insertions(+), 3 deletions(-)
+
+diff --git a/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.cpp b/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.cpp
+index 50852e0d..7bca3e47 100644
+--- a/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.cpp
++++ b/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.cpp
+@@ -203,7 +203,7 @@ void CoordinatedBackingStoreProxy::invalidateRegion(const Vector<IntRect, 1>& di
+ 
+ void CoordinatedBackingStoreProxy::createOrDestroyTiles(const IntRect& unscaledVisibleRect, const IntRect& unscaledContentsRect, const IntSize& unscaledViewportSize, float contentsScale, int maxTextureSize, Damage& damage, Vector<uint32_t>& tilesToCreate, Vector<uint32_t>& tilesToRemove)
+ {
+-    float coverAreaMultiplier = MemoryPressureHandler::singleton().isUnderMemoryPressure() ? 1.0f : 2.0f;
++    float coverAreaMultiplier = MemoryPressureHandler::singleton().isUnderMemoryPressure() ? 1.0f : defaultCoverAreaMultiplier();
+     bool contentsScaleChanged = m_contentsScale != contentsScale;
+     m_contentsScale = contentsScale;
+ 
+@@ -308,7 +308,7 @@ void CoordinatedBackingStoreProxy::createOrDestroyTiles(const IntRect& unscaledV
+ 
+     // Cover areas (in tiles) with minimum distance from the visible rect. If the visible rect is
+     // not covered already it will be covered first in one go, due to the distance being 0 for tiles
+-    // inside the visible rect.
++    // inside the visible rect. With tilesInOnePass(), every missing tile is created now instead.
+     Vector<IntPoint> tilePositionsToCreate;
+     unsigned requiredTileCount = 0;
+     forEachTilePositionInRect(m_coverRect, [&](IntPoint&& position) {
+@@ -316,7 +316,7 @@ void CoordinatedBackingStoreProxy::createOrDestroyTiles(const IntRect& unscaledV
+             return;
+ 
+         ++requiredTileCount;
+-        double distance = tileDistance(position);
++        double distance = tilesInOnePass() ? 0 : tileDistance(position);
+         if (distance > shortestDistance)
+             return;
+ 
+@@ -348,6 +348,44 @@ void CoordinatedBackingStoreProxy::createOrDestroyTiles(const IntRect& unscaledV
+     m_pendingTileCreation = requiredTileCount;
+ }
+ 
++// Where every composite is expensive (a software GL: seconds per frame on an old
++// CPU), painting tiles outside the viewport ring by ring costs one full composite
++// per ring. WEBKIT_TILE_COVER_MULTIPLIER sets how much beyond the viewport is
++// painted ahead (2 by default, 1 on IRIX); WEBKIT_TILES_ONE_PASS=1 creates every
++// missing tile at once (the default on IRIX; 0 turns it off).
++float CoordinatedBackingStoreProxy::defaultCoverAreaMultiplier()
++{
++    static float multiplier;
++    static std::once_flag onceFlag;
++    std::call_once(onceFlag, [] {
++#if OS(IRIX)
++        multiplier = 1.0f;
++#else
++        multiplier = 2.0f;
++#endif
++        if (const char* env = getenv("WEBKIT_TILE_COVER_MULTIPLIER"); env && *env) {
++            float value = static_cast<float>(atof(env));
++            if (value >= 1.0f)
++                multiplier = value;
++        }
++    });
++    return multiplier;
++}
++
++bool CoordinatedBackingStoreProxy::tilesInOnePass()
++{
++    static bool onePass;
++    static std::once_flag onceFlag;
++    std::call_once(onceFlag, [] {
++#if OS(IRIX)
++        onePass = true;
++#endif
++        if (const char* env = getenv("WEBKIT_TILES_ONE_PASS"); env && *env)
++            onePass = strcmp(env, "0");
++    });
++    return onePass;
++}
++
+ // This is based on the same heuristics used by chromium to compute the tile size.
+ IntSize CoordinatedBackingStoreProxy::computeTileSize(const IntSize& viewportSize, int maxTextureSize) const
+ {
+diff --git a/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.h b/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.h
+index 9b5c754f..573d05af 100644
+--- a/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.h
++++ b/Source/WebCore/platform/graphics/texmap/coordinated/CoordinatedBackingStoreProxy.h
+@@ -133,6 +133,8 @@ private:
+     void invalidateRegion(const Vector<IntRect, 1>&);
+     void createOrDestroyTiles(const IntRect& unscaledVisibleRect, const IntRect& unscaledContentsRect, const IntSize& unscaledViewportSize, float contentsScale, int maxTextureSize, Damage&, Vector<uint32_t>& tilesToCreate, Vector<uint32_t>& tilesToRemove);
+     IntSize computeTileSize(const IntSize& viewportSize, int maxTextureSize) const;
++    static float defaultCoverAreaMultiplier();
++    static bool tilesInOnePass();
+     std::pair<IntRect, IntRect> computeCoverAndKeepRect() const;
+     void adjustForContentsRect(IntRect&) const;
+ 
+-- 
+2.54.0 (Apple Git-157)
+

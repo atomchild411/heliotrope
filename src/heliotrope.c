@@ -80,6 +80,12 @@ typedef struct {
     int width, height;          /* of the window */
     int x, y;                   /* where -g asked for it */
     gboolean positioned;
+
+    /* HELIOTROPE_TIMING=1: a load timeline on stderr */
+    gboolean timing;
+    gint64 load_start;
+    gboolean first_frame_seen;
+    unsigned frames;
     Atom wm_delete, clipboard, utf8_string, selection_property;
 
     XImage *image;              /* the last frame, in the visual's format */
@@ -470,6 +476,8 @@ static void query_metrics(App *app, gboolean now)
         "(function(){var e=document.scrollingElement||document.documentElement;"
         "return window.scrollY+','+(e?e.scrollHeight:0)+','+window.innerHeight;})()";
     gint64 t = g_get_monotonic_time();
+    if (env_on("HELIOTROPE_NO_METRICS"))
+        return;
     if (app->metrics_pending || (!now && t - app->metrics_time < 300000))
         return;
     app->metrics_pending = TRUE;
@@ -603,8 +611,21 @@ static void write_ppm(App *app)
     g_printerr("heliotrope: wrote %s (%dx%d)\n", app->shot_path, app->last_width, app->last_height);
 }
 
+static void timing_mark(App *app, const char *what)
+{
+    if (app->timing && app->load_start)
+        g_printerr("heliotrope: +%6.1f s  %s (%u frames)\n", (g_get_monotonic_time() - app->load_start) / 1e6, what, app->frames);
+}
+
 static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
 {
+    gint64 t0 = g_get_monotonic_time();
+    app->frames++;
+    if (!app->first_frame_seen && app->load_start) {
+        app->first_frame_seen = TRUE;
+        timing_mark(app, "first frame");
+    } else if (app->timing && app->load_start)
+        timing_mark(app, "frame");
     GError *error = NULL;
     /* transfer none: the pixels belong to the buffer (valid until it is released). */
     GBytes *bytes = wpe_buffer_import_to_pixels(buffer, &error);
@@ -661,6 +682,8 @@ static void buffer_rendered(WPEView *view, WPEBuffer *buffer, App *app)
     }
     draw_page(app);
     XFlush(app->dpy);
+    if (app->timing)
+        g_printerr("heliotrope:          frame %dx%d copied to X in %.0f ms\n", w, h, (g_get_monotonic_time() - t0) / 1e3);
     query_metrics(app, FALSE);
 }
 
@@ -682,6 +705,16 @@ static void apply_site_choices(App *app);
 static void load_changed(WebKitWebView *web_view, WebKitLoadEvent event, App *app)
 {
     (void)web_view;
+    if (event == WEBKIT_LOAD_STARTED) {
+        app->load_start = g_get_monotonic_time();
+        app->first_frame_seen = FALSE;
+        app->frames = 0;
+        timing_mark(app, "load started");
+    } else if (event == WEBKIT_LOAD_COMMITTED) {
+        app->first_frame_seen = FALSE; /* frames of the old page don't count */
+        timing_mark(app, "committed (first bytes of the page)");
+    } else if (event == WEBKIT_LOAD_FINISHED)
+        timing_mark(app, "load finished");
     if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_REDIRECTED)
         apply_site_choices(app);
     if (event == WEBKIT_LOAD_STARTED || event == WEBKIT_LOAD_COMMITTED) {
@@ -1526,6 +1559,7 @@ int main(int argc, char **argv)
             url = argv[i];
     }
     app.home = g_strdup(getenv("HELIOTROPE_HOME") ? getenv("HELIOTROPE_HOME") : url);
+    app.timing = env_on("HELIOTROPE_TIMING");
     raise_descriptor_limit();
 
     app.edit = g_string_new(NULL);
@@ -1533,6 +1567,18 @@ int main(int argc, char **argv)
         return 1;
 
     display = wpe_display_headless_new();
+    {
+        /* Every repaint costs a full software-composited frame here (seconds on
+         * an R10000): no caret blinking (a static page then stops repainting),
+         * and ask pages for reduced motion. HELIOTROPE_ANIMATIONS=1 undoes both. */
+        WPESettings *wpe_settings = wpe_display_get_settings(display);
+        if (!env_on("HELIOTROPE_ANIMATIONS")) {
+            wpe_settings_set_uint32(wpe_settings, WPE_SETTING_CURSOR_BLINK_TIME, 0, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
+            wpe_settings_set_boolean(wpe_settings, WPE_SETTING_DISABLE_ANIMATIONS, TRUE, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
+        }
+        if (env_on("HELIOTROPE_NO_OVERLAY_SCROLLBARS"))
+            wpe_settings_set_boolean(wpe_settings, WPE_SETTING_OVERLAY_SCROLLBARS, FALSE, WPE_SETTINGS_SOURCE_APPLICATION, NULL);
+    }
     {
         const char *limit = getenv("HELIOTROPE_MEMORY_LIMIT");
         guint mb = limit && atoi(limit) > 0 ? (guint)atoi(limit) : 256;
@@ -1554,6 +1600,36 @@ int main(int argc, char **argv)
         g_object_unref(context);
     }
     g_object_unref(display);
+    /* WebKit features to switch on: redraw only what changed (damage tracking,
+     * off by default in WPE; a full frame costs seconds in software GL, a
+     * keystroke's worth a fraction of one; HELIOTROPE_NO_DAMAGE=1 turns it off),
+     * plus any named in HELIOTROPE_FEATURES=Name,Name for experiments. */
+    {
+        WebKitSettings *settings = webkit_web_view_get_settings(app.web_view);
+        WebKitFeatureList *all = webkit_settings_get_all_features();
+        char *list = g_strjoin(",", env_on("HELIOTROPE_NO_DAMAGE") ? "" : "PropagateDamagingInformation,UseDamagingInformationForCompositing",
+            getenv("HELIOTROPE_FEATURES") ? getenv("HELIOTROPE_FEATURES") : "", NULL);
+        char **names = g_strsplit(list, ",", -1);
+        gsize n = webkit_feature_list_get_length(all), k;
+        int j;
+        for (j = 0; names[j]; j++) {
+            gboolean found = FALSE;
+            if (!*names[j])
+                continue;
+            for (k = 0; k < n; k++) {
+                WebKitFeature *feature = webkit_feature_list_get(all, k);
+                if (!g_strcmp0(webkit_feature_get_identifier(feature), names[j])) {
+                    webkit_settings_set_feature_enabled(settings, feature, TRUE);
+                    found = TRUE;
+                }
+            }
+            if (!found || app.timing)
+                g_printerr("heliotrope: feature %s %s\n", names[j], found ? "on" : "not found");
+        }
+        g_strfreev(names);
+        g_free(list);
+        webkit_feature_list_unref(all);
+    }
     /* HELIOTROPE_CONSOLE=1: the page's console messages (including what the
      * content blocker stopped) go to stdout, for testing. */
     if (env_on("HELIOTROPE_CONSOLE"))
