@@ -244,6 +244,10 @@ seb/seh, 3-operand mul, rotr; big-endian) as it was.
 
 ## Known problems
 
+- **file:// pages are shown as source text** (2026-09-28): no MIME database
+  on IRIX for GIO to guess types from; ship shared-mime-info or map
+  extensions ourselves.
+
 - **Fixed 2026-09-28 (patch 0005, heliotrope 84c9f22 and later):** GitHub
   stalled because IRIX starts processes with 200 descriptors (heliotrope now
   raises the soft limit to the hard one); descriptors leaked into children
