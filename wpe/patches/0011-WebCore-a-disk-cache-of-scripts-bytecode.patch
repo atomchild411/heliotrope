@@ -1,4 +1,4 @@
-From 10de31946eb8ff0978f0a3a1c0db0d2e2c8dbd1b Mon Sep 17 00:00:00 2001
+From 51b6dca04e49a950d8287a0bebd4fdb7a9313508 Mon Sep 17 00:00:00 2001
 From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
 Date: Mon, 28 Sep 2026 20:42:33 -0800
 Subject: [PATCH] WebCore: a disk cache of scripts' bytecode
@@ -12,11 +12,11 @@ running; functions compiled later join it when the provider goes away.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- .../bindings/js/CachedScriptSourceProvider.h  | 145 ++++++++++++++++++
- 1 file changed, 145 insertions(+)
+ .../bindings/js/CachedScriptSourceProvider.h  | 144 ++++++++++++++++++
+ 1 file changed, 144 insertions(+)
 
 diff --git a/Source/WebCore/bindings/js/CachedScriptSourceProvider.h b/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
-index 1abc013d..a901855e 100644
+index 1abc013d..c8fe053a 100644
 --- a/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
 +++ b/Source/WebCore/bindings/js/CachedScriptSourceProvider.h
 @@ -29,7 +29,16 @@
@@ -44,7 +44,7 @@ index 1abc013d..a901855e 100644
          m_cachedScript->removeClient(*this);
      }
  
-@@ -55,6 +65,77 @@ public:
+@@ -55,6 +65,78 @@ public:
          return m_cachedScript->codeBlockHashConcurrently(startOffset, endOffset, kind, isModuleType() ? CachedScript::ShouldDecodeAsUTF8Only::Yes : CachedScript::ShouldDecodeAsUTF8Only::No);
      }
  
@@ -88,17 +88,17 @@ index 1abc013d..a901855e 100644
 +                WTFLogAlways("bytecode cache: compiled %s (%u bytes of source)", sourceURL().utf8().data(), source().length());
 +            m_cachedBytecode->addGlobalUpdate(*update);
 +            commitCachedBytecode();
-+            loadBytecode(); // so functions compiled from now on are kept too
 +        }
 +    }
 +
++    // Writes every update so far after the bytecode the file started with.
++    // The CachedBytecode stays: JSC's decoder records in it where each
++    // function's bytecode lies, which later updates need; so a later commit
++    // writes all updates again, over its own last write.
 +    void commitCachedBytecode() const final
 +    {
 +        if (!m_cachedBytecode || !m_cachedBytecode->hasUpdates())
 +            return;
-+        auto clearBytecode = makeScopeExit([&] {
-+            m_cachedBytecode = nullptr;
-+        });
 +        String path = bytecodeCachePath();
 +        if (path.isNull())
 +            return;
@@ -107,7 +107,7 @@ index 1abc013d..a901855e 100644
 +            return;
 +        auto fileSize = handle.size();
 +        size_t size;
-+        if (!fileSize || !WTF::convertSafely(*fileSize, size) || size != m_cachedBytecode->size())
++        if (!fileSize || !WTF::convertSafely(*fileSize, size) || (size != m_cachedBytecode->size() && size != m_committedSize))
 +            return; // someone else updated it
 +        if (!handle.truncate(m_cachedBytecode->sizeForUpdate()))
 +            return;
@@ -115,20 +115,21 @@ index 1abc013d..a901855e 100644
 +            if (handle.seek(offset, FileSystem::FileSeekOrigin::Beginning))
 +                handle.write(data);
 +        });
++        m_committedSize = m_cachedBytecode->sizeForUpdate();
 +        if (bytecodeCacheDebug())
-+            WTFLogAlways("bytecode cache: wrote %s (%zu bytes)", path.utf8().data(), m_cachedBytecode->sizeForUpdate());
++            WTFLogAlways("bytecode cache: wrote %s (%zu bytes)", path.utf8().data(), m_committedSize);
 +    }
 +
  private:
      CachedScriptSourceProvider(CachedScript* cachedScript, JSC::SourceProviderSourceType sourceType, Ref<CachedScriptFetcher>&& scriptFetcher)
          : SourceProvider(JSC::SourceOrigin { cachedScript->response().url(), WTF::move(scriptFetcher) }, String(cachedScript->response().url().string()), cachedScript->response().isRedirected() ? String(cachedScript->url().string()) : String(), cachedScript->requiresPrivacyProtections() ? JSC::SourceTaintedOrigin::KnownTainted : JSC::SourceTaintedOrigin::Untainted, TextPosition(), sourceType)
-@@ -63,7 +144,71 @@ private:
+@@ -63,7 +145,69 @@ private:
          m_cachedScript->addClient(*this);
      }
  
 +    // Functions are compiled as the page runs; the Web process may be killed
 +    // before this provider goes away, so write them two seconds after the
-+    // first new one, then map the file again to keep adding to it.
++    // first new one (and again after later ones).
 +    void scheduleCommit() const
 +    {
 +        if (m_commitScheduled || !RunLoop::isMain())
@@ -142,10 +143,7 @@ index 1abc013d..a901855e 100644
 +    void commitWhenQuiet() const
 +    {
 +        m_commitScheduled = false;
-+        if (!m_cachedBytecode || !m_cachedBytecode->hasUpdates())
-+            return;
 +        commitCachedBytecode();
-+        loadBytecode();
 +    }
 +
 +    static bool bytecodeCacheDebug()
@@ -191,6 +189,7 @@ index 1abc013d..a901855e 100644
      CachedResourceHandle<CachedScript> m_cachedScript;
 +    mutable RefPtr<JSC::CachedBytecode> m_cachedBytecode;
 +    mutable bool m_commitScheduled { false };
++    mutable size_t m_committedSize { 0 };
  };
  
  inline unsigned CachedScriptSourceProvider::hash() const

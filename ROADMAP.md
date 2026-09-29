@@ -273,6 +273,47 @@ was already on; it now lives in `~/.cache/heliotrope` (it was in
    self-modifying-code handling.
 3. DFG/FTL: not realistic (FTL's B3 backend exists only for x86-64/ARM64).
 
+## Performance work (tabled 2026-09-28, for when heliotrope should be usable by people)
+
+Where things stand: compositing is on the GPU (irix-egl-gles), frames go
+straight into the window, and scripts' bytecode is cached between visits.
+What is left is CPU in the Web process, and the network is not a factor:
+pages replayed from the Mac load in the same time as live ones.
+
+Harness (kept): `experiments/heliotrope-replay` holds Wikipedia, Google and
+GitHub recorded by `tools/replayproxy.py`; `HELIOTROPE_PROXY` puts heliotrope
+in test mode (see the README there). Profiling: SpeedShop pcsamp through
+`/var/tmp/ssprof-on.sh` on atom, decoded by `tools/ssprof.py`.
+
+Measured so far (Web process CPU):
+
+| | Google | GitHub |
+|---|---|---|
+| WebCore (style matching, CSS parsing, layout) | 20% | 37-53% |
+| JS parse + bytecode (cacheable now) | 21% | 12-16% |
+| JS interpreter (CLoop) | 10% | 2-4% |
+| JS runtime + IRIX libc (malloc) | 16% | 10-15% |
+| fonts: fontconfig + expat | 3% | 4-5% |
+| shaping (HarfBuzz) | 0.2% | 1.7-4.7% |
+| Cairo + pixman | 10% | 1-2% |
+
+Queued, in order:
+1. A baseline: each replayed site profiled several times, with one Cairo
+   build carrying symbols to name Google's Cairo hotspot.
+2. Cheap: -O2 instead of -Os for WebCore and JavaScriptCore; trim
+   fontconfig's 46 configuration files (WebKit runs its substitution rules
+   for every font family a page names); a faster allocator than IRIX malloc.
+3. WebCore style and layout, and JavaScript parsing: find what dominates
+   on the replayed pages and cut it ("get medieval", the user's words).
+4. Text: `HELIOTROPE_FAST_TEXT=1` (text-rendering: optimizeSpeed) removes
+   HarfBuzz shaping from plain text at the cost of kerning; a per-site or
+   global choice to make then.
+5. The n32 LLInt interpreter (sources in scratch/wpe/wpe-2.42-mips) only if
+   a JavaScript-bound site needs it.
+Known costs to weigh: the bytecode cache is about 3x the source on disk
+(GitHub alone 16 MB) and keeps a script's function updates in memory until
+its page goes away.
+
 ## Decisions pending
 
 - None on rendering. **Softpipe goes, decided 2026-09-28:** irix-egl-gles
