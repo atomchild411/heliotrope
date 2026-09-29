@@ -76,6 +76,21 @@ composites with softpipe; revisit per machine class):
 4. llvmpipe (see Decisions pending): needs LLVM's JIT on IRIX and loads
    libLLVM into every Web process.
 
+**What WebKit asks of GL** (2026-09-28, tools/shaders-2026-09-28-nir.txt):
+102 GL/EGL entry points (GLES 2 subset); on ordinary pages one fragment
+shader draws every tile: `gl_FragColor = u_textureColorSpaceMatrix *
+texture2D(s_sampler, uv)`, where the matrix only reorders Cairo's
+big-endian ARGB bytes (plus Mesa's solid-colour clear shader). softpipe time:
+~81% glDrawArrays (64% the interpreted shader, 15% bilinear sampling), ~4%
+uploads and readback, ~9-15% shader and state setup.
+- Fixed-function mapping (real SGI): tiles uploaded as GL_BGRA /
+  GL_UNSIGNED_INT_8_8_8_8_REV (Cairo's ARGB32 on any byte order), drawn as
+  textured quads with GL_REPLACE, or GL_MODULATE + glColor4f for opacity;
+  stencil for rounded clips; matrix stack for transforms; CPU fallback for
+  blur/filters. A WebKit-shaped "GLES 2 on IRIX libGL.so" layer is realistic.
+- Cheap softpipe tweaks: GL_NEAREST for 1:1 tile draws (bilinear is 7%+ of
+  softpipe); swap bytes at tile upload so the colour matrix drops out.
+
 Page loads are unchanged by 1-2 (Google ~72 s, Wikipedia ~47 s): each still
 needs 2-3 full frames, plus JavaScript (Google ~45 s) and 8-13 s of startup.
 

@@ -1,0 +1,1366 @@
+(
+(declare (location=0 shader_in ) vec4 gl_Vertex)
+(declare (location=14 shader_out ) vec4 gl_BackSecondaryColor)
+(declare (location=2 shader_out ) vec4 gl_FrontSecondaryColor)
+(declare (location=13 shader_out ) vec4 gl_BackColor)
+(declare (location=1 shader_out ) vec4 gl_FrontColor)
+(declare (location=16 shader_out ) vec4 gl_ClipVertex)
+(declare (location=3 shader_out ) float gl_FogFragCoord)
+(declare (location=4 shader_out ) (array vec4 0) gl_TexCoord)
+(declare (location=12 shader_out mediump ) float gl_PointSize)
+(declare (location=0 shader_out highp ) vec4 gl_Position)
+(declare (uniform ) (array mat4 8) gl_TextureMatrixInverseTranspose)
+(declare (uniform ) (array mat4 8) gl_TextureMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ProjectionMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ModelViewMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrixTranspose)
+(declare (uniform ) mat4 gl_ProjectionMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrix)
+(declare (shader_in highp ) vec4 a_vertex)
+(declare (shader_out highp ) vec2 v_texCoord)
+(declare (shader_out highp ) vec2 v_transformedTexCoord)
+(declare (shader_out highp ) float v_antialias)
+(declare (shader_out highp ) vec4 v_nonProjectedPosition)
+(declare (uniform highp ) mat4 u_modelViewMatrix)
+(declare (uniform highp ) mat4 u_projectionMatrix)
+(declare (uniform highp ) mat4 u_textureSpaceMatrix)
+( function noop
+  (signature void
+    (parameters
+      (declare (in highp ) vec2 position)
+    )
+    (
+    ))
+
+)
+
+( function toViewportSpace
+  (signature vec4
+    (parameters
+      (declare (in highp ) vec2 pos)
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (zw) (var_ref vec_ctor)  (constant vec2 (0.000000 1.000000)) ) 
+      (assign  (xy) (var_ref vec_ctor)  (var_ref pos) ) 
+      (return (expression vec4 * (var_ref u_modelViewMatrix) (var_ref vec_ctor) ) )
+    ))
+
+)
+
+( function applyAntialiasing
+  (signature void
+    (parameters
+      (declare (in highp ) vec2 position)
+    )
+    (
+      (declare (highp ) float antialiasInflationDistance) (constant float (1.000000))  (constant float (1.000000)) 
+      (declare (highp ) vec2 center) (constant vec2 (0.500000 0.500000))  (constant vec2 (0.500000 0.500000)) 
+      (declare (temporary ) vec2 assignment_tmp)
+      (assign  (xy) (var_ref center)  (constant vec2 (0.500000 0.500000)) ) 
+      (declare (temporary ) float assignment_tmp@2)
+      (assign  (x) (var_ref antialiasInflationDistance)  (constant float (1.000000)) ) 
+      (declare (temporary ) vec2 assignment_tmp@3)
+      (assign  (xy) (var_ref assignment_tmp@3)  (swiz zw (var_ref a_vertex) )) 
+      (declare (temporary ) float distance_retval)
+      (declare (temporary ) vec2 compiler_temp)
+      (assign  (xy) (var_ref compiler_temp)  (expression vec2 + (var_ref position) (expression vec2 neg (swiz zw (var_ref a_vertex) )) ) ) 
+      (declare (temporary ) bool assignment_tmp@4)
+      (if (expression bool < (constant float (0.000000)) (expression float sqrt (expression float dot (var_ref compiler_temp) (var_ref compiler_temp) ) ) ) (
+        (declare (highp ) float viewportSpaceDistance)
+        (declare (temporary ) vec4 toViewportSpace_retval)
+        (call toViewportSpace (var_ref toViewportSpace_retval)  ((var_ref assignment_tmp@3) ))
+
+        (declare (temporary ) float distance_retval@5)
+        (declare (temporary ) vec2 p0)
+        (declare (temporary ) vec2 p1)
+        (declare (temporary ) vec2 compiler_temp@6)
+        (assign  (xy) (var_ref compiler_temp@6)  (expression vec2 + (expression vec2 * (swiz xy (var_ref v_nonProjectedPosition) )(swiz w (var_ref toViewportSpace_retval) )) (expression vec2 neg (expression vec2 * (swiz xy (var_ref toViewportSpace_retval) )(swiz w (var_ref v_nonProjectedPosition) )) ) ) ) 
+        (assign  (x) (var_ref distance_retval@5)  (expression float sqrt (expression float dot (var_ref compiler_temp@6) (var_ref compiler_temp@6) ) ) ) 
+        (assign  (x) (var_ref viewportSpaceDistance)  (var_ref distance_retval@5) ) 
+        (if (expression bool < (constant float (0.000000)) (swiz w (var_ref toViewportSpace_retval) )) (
+          (assign  (x) (var_ref viewportSpaceDistance)  (expression float / (var_ref distance_retval@5) (swiz w (var_ref toViewportSpace_retval) )) ) 
+        )
+        ())
+
+        (assign  (x) (var_ref v_antialias)  (expression float + (var_ref viewportSpaceDistance) (swiz w (var_ref v_nonProjectedPosition) )) ) 
+      )
+      (
+        (declare (temporary ) vec4 toViewportSpace_retval@7)
+        (call toViewportSpace (var_ref toViewportSpace_retval@7)  ((constant vec2 (0.500000 0.500000)) ))
+
+        (declare (temporary ) vec2 assignment_tmp@8)
+        (assign  (xy) (var_ref assignment_tmp@8)  (expression vec2 + (expression vec2 * (swiz xy (var_ref v_nonProjectedPosition) )(swiz w (var_ref toViewportSpace_retval@7) )) (expression vec2 neg (expression vec2 * (swiz xy (var_ref toViewportSpace_retval@7) )(swiz w (var_ref v_nonProjectedPosition) )) ) ) ) 
+        (declare (temporary ) float length_retval)
+        (assign  (x) (var_ref length_retval)  (expression float sqrt (expression float dot (var_ref assignment_tmp@8) (var_ref assignment_tmp@8) ) ) ) 
+        (if (expression bool < (constant float (0.000000)) (var_ref length_retval) ) (
+          (declare (temporary ) float distance_retval@9)
+          (declare (temporary ) vec3 compiler_temp@10)
+          (assign  (xyz) (var_ref compiler_temp@10)  (expression vec3 + (swiz xyz (var_ref v_nonProjectedPosition) )(expression vec3 neg (swiz xyz (var_ref toViewportSpace_retval@7) )) ) ) 
+          (assign  (x) (var_ref distance_retval@9)  (expression float sqrt (expression float dot (var_ref compiler_temp@10) (var_ref compiler_temp@10) ) ) ) 
+          (declare (temporary ) vec2 normalize_retval)
+          (declare (temporary ) vec4 vec_ctor)
+          (assign  (zw) (var_ref vec_ctor)  (constant vec2 (0.000000 0.000000)) ) 
+          (assign  (xy) (var_ref vec_ctor)  (expression vec2 * (expression vec2 * (var_ref assignment_tmp@8) (expression float rsq (expression float dot (var_ref assignment_tmp@8) (var_ref assignment_tmp@8) ) ) ) (swiz w (var_ref v_nonProjectedPosition) )) ) 
+          (assign  (xyzw) (var_ref v_nonProjectedPosition)  (expression vec4 + (var_ref v_nonProjectedPosition) (var_ref vec_ctor) ) ) 
+          (declare (temporary ) float distance_retval@11)
+          (declare (temporary ) vec3 compiler_temp@12)
+          (assign  (xyz) (var_ref compiler_temp@12)  (expression vec3 + (swiz xyz (var_ref v_nonProjectedPosition) )(expression vec3 neg (swiz xyz (var_ref toViewportSpace_retval@7) )) ) ) 
+          (declare (temporary ) vec2 normalize_retval@13)
+          (declare (temporary ) vec2 x)
+          (assign  (xy) (var_ref x)  (expression vec2 + (var_ref position) (constant vec2 (-0.500000 -0.500000)) ) ) 
+          (assign  (xy) (var_ref v_texCoord)  (expression vec2 + (var_ref v_texCoord) (expression vec2 / (expression vec2 * (expression vec2 * (var_ref x) (expression float rsq (expression float dot (var_ref x) (var_ref x) ) ) ) (expression float + (expression float sqrt (expression float dot (var_ref compiler_temp@12) (var_ref compiler_temp@12) ) ) (expression float neg (var_ref distance_retval@9) ) ) ) (var_ref distance_retval@9) ) ) ) 
+        )
+        ())
+
+        (assign  (x) (var_ref v_antialias)  (constant float (0.000000)) ) 
+      ))
+
+    ))
+
+)
+
+( function main
+  (signature void
+    (parameters
+    )
+    (
+      (declare (highp ) vec2 position)
+      (declare (temporary ) vec2 assignment_tmp)
+      (assign  (xy) (var_ref assignment_tmp)  (swiz xy (var_ref a_vertex) )) 
+      (assign  (xy) (var_ref position)  (var_ref assignment_tmp) ) 
+      (assign  (xy) (var_ref v_texCoord)  (var_ref assignment_tmp) ) 
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (zw) (var_ref vec_ctor)  (constant vec2 (0.000000 1.000000)) ) 
+      (assign  (xy) (var_ref vec_ctor)  (var_ref assignment_tmp) ) 
+      (assign  (xy) (var_ref v_transformedTexCoord)  (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (var_ref vec_ctor) ) )) 
+      (declare (temporary ) vec4 toViewportSpace_retval)
+      (call toViewportSpace (var_ref toViewportSpace_retval)  ((var_ref assignment_tmp) ))
+
+      (assign  (xyzw) (var_ref v_nonProjectedPosition)  (var_ref toViewportSpace_retval) ) 
+      (call noop  ((var_ref position) ))
+
+      (assign  (xyzw) (var_ref gl_Position)  (expression vec4 * (var_ref u_projectionMatrix) (var_ref v_nonProjectedPosition) ) ) 
+    ))
+
+)
+
+)
+(
+(declare (location=2 shader_out mediump ) vec4 gl_FragColor)
+(declare (location=25 shader_in mediump ) vec2 gl_PointCoord)
+(declare (location=24 shader_in flat) bool gl_FrontFacing)
+(declare (location=0 shader_in mediump ) vec4 gl_FragCoord)
+(declare (location=2 shader_in ) vec4 gl_SecondaryColor)
+(declare (location=1 shader_in ) vec4 gl_Color)
+(declare (location=3 shader_in ) float gl_FogFragCoord)
+(declare (location=4 shader_in ) (array vec4 0) gl_TexCoord)
+(declare (uniform ) (array mat4 8) gl_TextureMatrixInverseTranspose)
+(declare (uniform ) (array mat4 8) gl_TextureMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ProjectionMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ModelViewMatrixInverseTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrixTranspose)
+(declare (uniform ) mat4 gl_ProjectionMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewMatrixTranspose)
+(declare (uniform ) mat4 gl_ModelViewProjectionMatrix)
+(declare (uniform highp ) mat4 u_textureSpaceMatrix)
+(declare (uniform highp ) mat4 u_textureColorSpaceMatrix)
+(declare (shader_in mediump ) float v_antialias)
+(declare (shader_in mediump ) vec2 v_texCoord)
+(declare (shader_in mediump ) vec2 v_transformedTexCoord)
+(declare (shader_in highp ) vec4 v_nonProjectedPosition)
+(declare (uniform lowp ) sampler2D s_sampler)
+(declare (uniform lowp ) sampler2D s_samplerY)
+(declare (uniform lowp ) sampler2D s_samplerU)
+(declare (uniform lowp ) sampler2D s_samplerV)
+(declare (uniform lowp ) sampler2D s_samplerA)
+(declare (uniform lowp ) sampler2D s_contentTexture)
+(declare (uniform lowp ) sampler2D s_externalOESTexture)
+(declare (uniform mediump ) float u_opacity)
+(declare (uniform mediump ) float u_filterAmount)
+(declare (uniform mediump ) mat4 u_yuvToRgb)
+(declare (uniform mediump ) vec4 u_color)
+(declare (uniform mediump ) vec2 u_texelSize)
+(declare (uniform mediump ) vec2 u_uvMax)
+(declare (uniform mediump ) (array float 6) u_gaussianKernel)
+(declare (uniform mediump ) (array float 6) u_gaussianKernelOffset)
+(declare (uniform mediump ) int u_gaussianKernelHalfSize)
+(declare (uniform mediump ) vec2 u_blurDirection)
+(declare (uniform mediump ) int u_roundedRectNumber)
+(declare (uniform highp ) (array vec4 30) u_roundedRect)
+(declare (uniform highp ) (array mat4 10) u_roundedRectInverseTransformMatrix)
+( function noop
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 dummyParameter)
+    )
+    (
+    ))
+
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 dummyParameter)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+    ))
+
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec2 dummyParameter)
+    )
+    (
+    ))
+
+)
+
+( function antialias
+  (signature float
+    (parameters
+    )
+    (
+      (declare (temporary ) bool execute_flag)
+      (assign  (x) (var_ref execute_flag)  (constant bool (1)) ) 
+      (declare (temporary ) float return_value)
+      (declare (temporary ) bool return_flag)
+      (assign  (x) (var_ref return_flag)  (constant bool (0)) ) 
+      (if (expression bool >= (constant float (0.000000)) (swiz w (var_ref v_nonProjectedPosition) )) (
+        (assign  (x) (var_ref return_value)  (constant float (1.000000)) ) 
+        (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+        (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+      )
+      (
+        (declare (temporary ) float smoothstep_retval)
+        (declare (temporary ) float edge0) (constant float (0.000000)) 
+        (assign  (x) (var_ref edge0)  (constant float (0.000000)) ) 
+        (declare (temporary ) float edge1)
+        (declare (temporary ) float x)
+        (declare (temporary ) float compiler_temp)
+        (assign  (x) (var_ref compiler_temp)  (expression float sat (expression float / (var_ref v_antialias) (swiz w (var_ref v_nonProjectedPosition) )) ) ) 
+        (assign  (x) (var_ref smoothstep_retval)  (expression float * (var_ref compiler_temp) (expression float * (var_ref compiler_temp) (expression float + (constant float (3.000000)) (expression float neg (expression float * (constant float (2.000000)) (var_ref compiler_temp) ) ) ) ) ) ) 
+        (assign  (x) (var_ref return_value)  (var_ref smoothstep_retval) ) 
+        (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+        (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+      ))
+
+      (return (var_ref return_value) )
+    ))
+
+)
+
+( function fragmentTransformTexCoord
+  (signature vec2
+    (parameters
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (zw) (var_ref vec_ctor)  (constant vec2 (0.000000 1.000000)) ) 
+      (assign  (xy) (var_ref vec_ctor)  (var_ref v_texCoord) ) 
+      (declare (temporary ) vec4 clamp_retval)
+      (declare (temporary ) float minVal)
+      (declare (temporary ) float maxVal)
+      (return (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (expression vec4 sat (var_ref vec_ctor) ) ) ))
+    ))
+
+)
+
+( function vertexTransformTexCoord
+  (signature vec2
+    (parameters
+    )
+    (
+      (return (var_ref v_transformedTexCoord) )
+    ))
+
+)
+
+( function applyManualRepeat
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec2 pos)
+    )
+    (
+      (declare (temporary ) vec2 fract_retval)
+      (assign  (xy) (var_ref pos)  (expression vec2 fract (var_ref pos) ) ) 
+    ))
+
+)
+
+( function applyClampUVBounds
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec2 assignment_tmp)
+      (declare (temporary ) vec2 clamp_retval)
+      (declare (temporary ) vec2 minVal)
+      (assign  (xy) (var_ref texCoord)  (expression vec2 min (expression vec2 max (var_ref texCoord) (constant vec2 (0.000000 0.000000)) ) (expression vec2 + (var_ref u_uvMax) (expression vec2 neg (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) ) ) 
+    ))
+
+)
+
+( function applyTextureRGB
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (tex vec4 (var_ref s_sampler)  (var_ref texCoord)  0 1 () )) ) 
+    ))
+
+)
+
+( function applyPremultiply
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (xyz) (var_ref vec_ctor)  (expression vec3 * (swiz xyz (var_ref color) )(swiz w (var_ref color) )) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applyToneMapPQ
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float assignment_tmp)
+      (declare (temporary ) float assignment_tmp@14)
+      (declare (temporary ) float assignment_tmp@15)
+      (declare (temporary ) float assignment_tmp@16)
+      (declare (temporary ) float assignment_tmp@17)
+      (declare (temporary ) vec3 max_retval)
+      (declare (temporary ) vec3 y)
+      (declare (temporary ) vec3 vec_ctor)
+      (declare (temporary ) vec3 pow_retval)
+      (assign  (xyz) (var_ref pow_retval)  (expression vec3 pow (expression vec3 max (swiz xyz (var_ref color) )(constant vec3 (0.000000 0.000000 0.000000)) ) (constant vec3 (0.012683 0.012683 0.012683)) ) ) 
+      (declare (temporary ) vec3 max_retval@18)
+      (declare (temporary ) vec3 x)
+      (declare (temporary ) vec3 y@19)
+      (declare (temporary ) vec3 assignment_tmp@20)
+      (declare (temporary ) vec3 vec_ctor@21)
+      (declare (temporary ) vec3 pow_retval@22)
+      (declare (temporary ) vec3 x@23)
+      (declare (temporary ) float assignment_tmp@24)
+      (declare (temporary ) float assignment_tmp@25)
+      (declare (temporary ) vec3 assignment_tmp@26)
+      (assign  (xyz) (var_ref assignment_tmp@26)  (expression vec3 * (expression vec3 pow (expression vec3 / (expression vec3 max (expression vec3 + (var_ref pow_retval) (constant float (-0.835938)) ) (constant vec3 (0.000000 0.000000 0.000000)) ) (expression vec3 + (constant float (18.851562)) (expression vec3 neg (expression vec3 * (constant float (18.687500)) (var_ref pow_retval) ) ) ) ) (constant vec3 (6.277395 6.277395 6.277395)) ) (constant float (49.261086)) ) ) 
+      (declare (temporary ) float max_retval@27)
+      (declare (temporary ) float max_retval@28)
+      (declare (temporary ) vec3 assignment_tmp@29)
+      (declare (temporary ) vec3 assignment_tmp_0)
+      (declare (temporary ) vec3 assignment_tmp_1)
+      (declare (temporary ) vec3 assignment_tmp_2)
+      (declare (temporary ) vec3 assignment_tmp@30)
+      (assign  (xyz) (var_ref assignment_tmp@30)  (expression vec3 * (constant mat3 (1.660500 -0.124600 -0.018200 -0.587600 1.132900 -0.100600 -0.072800 -0.008300 1.118700)) (expression vec3 / (var_ref assignment_tmp@26) (expression float + (constant float (1.000000)) (expression float max (expression float max (swiz x (var_ref assignment_tmp@26) )(swiz y (var_ref assignment_tmp@26) )) (swiz z (var_ref assignment_tmp@26) )) ) ) ) ) 
+      (declare (temporary ) bvec3 lessThan_retval)
+      (declare (temporary ) vec3 y@31)
+      (declare (temporary ) vec3 pow_retval@32)
+      (declare (temporary ) vec3 y@33)
+      (declare (temporary ) vec3 assignment_tmp@34)
+      (declare (temporary ) vec3 assignment_tmp@35)
+      (declare (temporary ) vec3 vec_ctor@36)
+      (declare (temporary ) vec3 mix_retval)
+      (declare (temporary ) vec4 vec_ctor@37)
+      (assign  (xyz) (var_ref vec_ctor@37)  (expression vec3 lrp (expression vec3 + (expression vec3 * (constant vec3 (1.055000 1.055000 1.055000)) (expression vec3 pow (var_ref assignment_tmp@30) (constant vec3 (0.416667 0.416667 0.416667)) ) ) (constant vec3 (-0.055000 -0.055000 -0.055000)) ) (expression vec3 * (var_ref assignment_tmp@30) (constant vec3 (12.920000 12.920000 12.920000)) ) (expression vec3 b2f (expression bvec3 < (var_ref assignment_tmp@30) (constant vec3 (0.003131 0.003131 0.003131)) ) ) ) ) 
+      (assign  (w) (var_ref vec_ctor@37)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor@37) ) 
+    ))
+
+)
+
+( function yuvToRgb
+  (signature vec3
+    (parameters
+      (declare (in mediump ) float y)
+      (declare (in mediump ) float u)
+      (declare (in mediump ) float v)
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (w) (var_ref vec_ctor)  (constant float (1.000000)) ) 
+      (assign  (x) (var_ref vec_ctor)  (var_ref y) ) 
+      (assign  (y) (var_ref vec_ctor)  (var_ref u) ) 
+      (assign  (z) (var_ref vec_ctor)  (var_ref v) ) 
+      (declare (temporary ) vec4 assignment_tmp)
+      (return (swiz xyz (expression vec4 * (var_ref vec_ctor) (var_ref u_yuvToRgb) ) ))
+    ))
+
+)
+
+( function applyTextureYUV
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) float assignment_tmp)
+      (declare (temporary ) vec4 texture2D_retval@38)
+      (declare (temporary ) float assignment_tmp@39)
+      (declare (temporary ) vec4 texture2D_retval@40)
+      (declare (temporary ) float assignment_tmp@41)
+      (declare (temporary ) vec3 yuvToRgb_retval)
+      (call yuvToRgb (var_ref yuvToRgb_retval)  ((swiz x (tex vec4 (var_ref s_samplerY)  (var_ref texCoord)  0 1 () ))(swiz x (tex vec4 (var_ref s_samplerU)  (var_ref texCoord)  0 1 () ))(swiz x (tex vec4 (var_ref s_samplerV)  (var_ref texCoord)  0 1 () ))))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (w) (var_ref vec_ctor)  (constant float (1.000000)) ) 
+      (assign  (xyz) (var_ref vec_ctor)  (var_ref yuvToRgb_retval) ) 
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (var_ref vec_ctor) ) ) 
+    ))
+
+)
+
+( function applyTextureYUVA
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (mediump ) float a)
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) float assignment_tmp)
+      (declare (temporary ) vec4 texture2D_retval@42)
+      (declare (temporary ) float assignment_tmp@43)
+      (declare (temporary ) vec4 texture2D_retval@44)
+      (declare (temporary ) float assignment_tmp@45)
+      (declare (temporary ) vec4 texture2D_retval@46)
+      (declare (temporary ) float assignment_tmp@47)
+      (assign  (x) (var_ref a)  (swiz x (tex vec4 (var_ref s_samplerA)  (var_ref texCoord)  0 1 () ))) 
+      (declare (temporary ) vec3 yuvToRgb_retval)
+      (call yuvToRgb (var_ref yuvToRgb_retval)  ((swiz x (tex vec4 (var_ref s_samplerY)  (var_ref texCoord)  0 1 () ))(swiz x (tex vec4 (var_ref s_samplerU)  (var_ref texCoord)  0 1 () ))(swiz x (tex vec4 (var_ref s_samplerV)  (var_ref texCoord)  0 1 () ))))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (xyz) (var_ref vec_ctor)  (var_ref yuvToRgb_retval) ) 
+      (assign  (w) (var_ref vec_ctor)  (var_ref a) ) 
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (var_ref vec_ctor) ) ) 
+    ))
+
+)
+
+( function applyTextureNV12
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) float assignment_tmp)
+      (declare (temporary ) vec4 texture2D_retval@48)
+      (declare (temporary ) vec2 assignment_tmp@49)
+      (assign  (xy) (var_ref assignment_tmp@49)  (swiz xy (tex vec4 (var_ref s_samplerU)  (var_ref texCoord)  0 1 () ))) 
+      (declare (temporary ) vec3 yuvToRgb_retval)
+      (call yuvToRgb (var_ref yuvToRgb_retval)  ((swiz x (tex vec4 (var_ref s_samplerY)  (var_ref texCoord)  0 1 () ))(swiz x (var_ref assignment_tmp@49) )(swiz y (var_ref assignment_tmp@49) )))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (w) (var_ref vec_ctor)  (constant float (1.000000)) ) 
+      (assign  (xyz) (var_ref vec_ctor)  (var_ref yuvToRgb_retval) ) 
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (var_ref vec_ctor) ) ) 
+    ))
+
+)
+
+( function applyTextureNV21
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) float assignment_tmp)
+      (declare (temporary ) vec4 texture2D_retval@50)
+      (declare (temporary ) vec2 assignment_tmp@51)
+      (assign  (xy) (var_ref assignment_tmp@51)  (swiz yx (tex vec4 (var_ref s_samplerU)  (var_ref texCoord)  0 1 () ))) 
+      (declare (temporary ) vec3 yuvToRgb_retval)
+      (call yuvToRgb (var_ref yuvToRgb_retval)  ((swiz x (tex vec4 (var_ref s_samplerY)  (var_ref texCoord)  0 1 () ))(swiz x (var_ref assignment_tmp@51) )(swiz y (var_ref assignment_tmp@51) )))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (w) (var_ref vec_ctor)  (constant float (1.000000)) ) 
+      (assign  (xyz) (var_ref vec_ctor)  (var_ref yuvToRgb_retval) ) 
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (var_ref vec_ctor) ) ) 
+    ))
+
+)
+
+( function applyTexturePackedYUV
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (mediump ) vec4 data)
+      (declare (temporary ) vec4 texture2D_retval)
+      (assign  (xyzw) (var_ref texture2D_retval)  (tex vec4 (var_ref s_sampler)  (var_ref texCoord)  0 1 () )) 
+      (assign  (xyzw) (var_ref data)  (var_ref texture2D_retval) ) 
+      (declare (temporary ) vec3 yuvToRgb_retval)
+      (call yuvToRgb (var_ref yuvToRgb_retval)  ((swiz z (var_ref texture2D_retval) )(swiz y (var_ref texture2D_retval) )(swiz x (var_ref texture2D_retval) )))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (xyz) (var_ref vec_ctor)  (var_ref yuvToRgb_retval) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref data) )) 
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref u_textureColorSpaceMatrix) (var_ref vec_ctor) ) ) 
+    ))
+
+)
+
+( function applyOpacity
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref u_opacity) ) ) 
+    ))
+
+)
+
+( function applyAntialiasing
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float antialias_retval)
+      (call antialias (var_ref antialias_retval)  ())
+
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref antialias_retval) ) ) 
+    ))
+
+)
+
+( function applyGrayscaleFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float assignment_tmp)
+      (assign  (x) (var_ref assignment_tmp)  (expression float + (constant float (1.000000)) (expression float neg (var_ref u_filterAmount) ) ) ) 
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.212600)) (expression float * (constant float (0.787400)) (var_ref assignment_tmp) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715200)) (expression float neg (expression float * (constant float (0.715200)) (var_ref assignment_tmp) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072200)) (expression float neg (expression float * (constant float (0.072200)) (var_ref assignment_tmp) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (y) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.212600)) (expression float neg (expression float * (constant float (0.212600)) (var_ref assignment_tmp) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715200)) (expression float * (constant float (0.284800)) (var_ref assignment_tmp) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072200)) (expression float neg (expression float * (constant float (0.072200)) (var_ref assignment_tmp) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (z) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.212600)) (expression float neg (expression float * (constant float (0.212600)) (var_ref assignment_tmp) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715200)) (expression float neg (expression float * (constant float (0.715200)) (var_ref assignment_tmp) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072200)) (expression float * (constant float (0.927800)) (var_ref assignment_tmp) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applySepiaFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float assignment_tmp)
+      (assign  (x) (var_ref assignment_tmp)  (expression float + (constant float (1.000000)) (expression float neg (var_ref u_filterAmount) ) ) ) 
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.393000)) (expression float * (constant float (0.607000)) (var_ref assignment_tmp) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.769000)) (expression float neg (expression float * (constant float (0.769000)) (var_ref assignment_tmp) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.189000)) (expression float neg (expression float * (constant float (0.189000)) (var_ref assignment_tmp) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (y) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.349000)) (expression float neg (expression float * (constant float (0.349000)) (var_ref assignment_tmp) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.686000)) (expression float * (constant float (0.314000)) (var_ref assignment_tmp) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.168000)) (expression float neg (expression float * (constant float (0.168000)) (var_ref assignment_tmp) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (z) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.272000)) (expression float neg (expression float * (constant float (0.272000)) (var_ref assignment_tmp) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.534000)) (expression float neg (expression float * (constant float (0.534000)) (var_ref assignment_tmp) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.131000)) (expression float * (constant float (0.869000)) (var_ref assignment_tmp) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applySaturateFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.213000)) (expression float * (constant float (0.787000)) (var_ref u_filterAmount) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715000)) (expression float neg (expression float * (constant float (0.715000)) (var_ref u_filterAmount) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072000)) (expression float neg (expression float * (constant float (0.072000)) (var_ref u_filterAmount) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (y) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.213000)) (expression float neg (expression float * (constant float (0.213000)) (var_ref u_filterAmount) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715000)) (expression float * (constant float (0.285000)) (var_ref u_filterAmount) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072000)) (expression float neg (expression float * (constant float (0.072000)) (var_ref u_filterAmount) ) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (z) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (expression float + (constant float (0.213000)) (expression float neg (expression float * (constant float (0.213000)) (var_ref u_filterAmount) ) ) ) (swiz x (var_ref color) )) (expression float * (expression float + (constant float (0.715000)) (expression float neg (expression float * (constant float (0.715000)) (var_ref u_filterAmount) ) ) ) (swiz y (var_ref color) )) ) (expression float * (expression float + (constant float (0.072000)) (expression float * (constant float (0.928000)) (var_ref u_filterAmount) ) ) (swiz z (var_ref color) )) ) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applyHueRotateFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float assignment_tmp) (constant float (3.141593)) 
+      (assign  (x) (var_ref assignment_tmp)  (constant float (3.141593)) ) 
+      (declare (temporary ) float cos_retval)
+      (declare (temporary ) float x)
+      (assign  (x) (var_ref cos_retval)  (expression float cos (expression float / (expression float * (var_ref u_filterAmount) (constant float (3.141593)) ) (constant float (180.000000)) ) ) ) 
+      (declare (temporary ) float sin_retval)
+      (declare (temporary ) float x@52)
+      (assign  (x) (var_ref sin_retval)  (expression float sin (expression float / (expression float * (var_ref u_filterAmount) (constant float (3.141593)) ) (constant float (180.000000)) ) ) ) 
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (swiz x (var_ref color) )(expression float + (expression float + (constant float (0.213000)) (expression float * (var_ref cos_retval) (constant float (0.787000)) ) ) (expression float neg (expression float * (var_ref sin_retval) (constant float (0.213000)) ) ) ) ) (expression float * (swiz y (var_ref color) )(expression float + (expression float + (constant float (0.715000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.715000)) ) ) ) (expression float neg (expression float * (var_ref sin_retval) (constant float (0.715000)) ) ) ) ) ) (expression float * (swiz z (var_ref color) )(expression float + (expression float + (constant float (0.072000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.072000)) ) ) ) (expression float * (var_ref sin_retval) (constant float (0.928000)) ) ) ) ) ) 
+      (assign  (y) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (swiz x (var_ref color) )(expression float + (expression float + (constant float (0.213000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.213000)) ) ) ) (expression float * (var_ref sin_retval) (constant float (0.143000)) ) ) ) (expression float * (swiz y (var_ref color) )(expression float + (expression float + (constant float (0.715000)) (expression float * (var_ref cos_retval) (constant float (0.285000)) ) ) (expression float * (var_ref sin_retval) (constant float (0.140000)) ) ) ) ) (expression float * (swiz z (var_ref color) )(expression float + (expression float + (constant float (0.072000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.072000)) ) ) ) (expression float neg (expression float * (var_ref sin_retval) (constant float (0.283000)) ) ) ) ) ) ) 
+      (assign  (z) (var_ref vec_ctor)  (expression float + (expression float + (expression float * (swiz x (var_ref color) )(expression float + (expression float + (constant float (0.213000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.213000)) ) ) ) (expression float neg (expression float * (var_ref sin_retval) (constant float (0.787000)) ) ) ) ) (expression float * (swiz y (var_ref color) )(expression float + (expression float + (constant float (0.715000)) (expression float neg (expression float * (var_ref cos_retval) (constant float (0.715000)) ) ) ) (expression float * (var_ref sin_retval) (constant float (0.715000)) ) ) ) ) (expression float * (swiz z (var_ref color) )(expression float + (expression float + (constant float (0.072000)) (expression float * (var_ref cos_retval) (constant float (0.928000)) ) ) (expression float * (var_ref sin_retval) (constant float (0.072000)) ) ) ) ) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function invert
+  (signature float
+    (parameters
+      (declare (in mediump ) float n)
+      (declare (in mediump ) float a)
+    )
+    (
+      (return (expression float + (expression float * (expression float + (var_ref a) (expression float neg (var_ref n) ) ) (var_ref u_filterAmount) ) (expression float * (var_ref n) (expression float + (constant float (1.000000)) (expression float neg (var_ref u_filterAmount) ) ) ) ) )
+    ))
+
+)
+
+( function applyInvertFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float invert_retval)
+      (call invert (var_ref invert_retval)  ((swiz x (var_ref color) )(swiz w (var_ref color) )))
+
+      (declare (temporary ) float invert_retval@53)
+      (call invert (var_ref invert_retval@53)  ((swiz y (var_ref color) )(swiz w (var_ref color) )))
+
+      (declare (temporary ) float invert_retval@54)
+      (call invert (var_ref invert_retval@54)  ((swiz z (var_ref color) )(swiz w (var_ref color) )))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (var_ref invert_retval) ) 
+      (assign  (y) (var_ref vec_ctor)  (var_ref invert_retval@53) ) 
+      (assign  (z) (var_ref vec_ctor)  (var_ref invert_retval@54) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applyBrightnessFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (xyz) (var_ref vec_ctor)  (expression vec3 * (swiz xyz (var_ref color) )(var_ref u_filterAmount) ) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function contrast
+  (signature float
+    (parameters
+      (declare (in mediump ) float n)
+    )
+    (
+      (return (expression float + (expression float * (expression float + (var_ref n) (constant float (-0.500000)) ) (var_ref u_filterAmount) ) (constant float (0.500000)) ) )
+    ))
+
+)
+
+( function applyContrastFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (temporary ) float contrast_retval)
+      (call contrast (var_ref contrast_retval)  ((swiz x (var_ref color) )))
+
+      (declare (temporary ) float contrast_retval@55)
+      (call contrast (var_ref contrast_retval@55)  ((swiz y (var_ref color) )))
+
+      (declare (temporary ) float contrast_retval@56)
+      (call contrast (var_ref contrast_retval@56)  ((swiz z (var_ref color) )))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (x) (var_ref vec_ctor)  (var_ref contrast_retval) ) 
+      (assign  (y) (var_ref vec_ctor)  (var_ref contrast_retval@55) ) 
+      (assign  (z) (var_ref vec_ctor)  (var_ref contrast_retval@56) ) 
+      (assign  (w) (var_ref vec_ctor)  (swiz w (var_ref color) )) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applyOpacityFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref u_filterAmount) ) ) 
+    ))
+
+)
+
+( function applyTextureCopy
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec2 assignment_tmp)
+      (declare (temporary ) vec2 assignment_tmp@57)
+      (declare (temporary ) vec2 clamp_retval)
+      (declare (temporary ) vec4 texture2D_retval)
+      (assign  (xyzw) (var_ref color)  (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (var_ref texCoord) (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (0.000000 0.000000 0.000000 1.000000)) ) )(expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (1.000000 1.000000 0.000000 1.000000)) ) )(expression vec2 neg (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) )  0 1 () )) 
+    ))
+
+)
+
+( function applyBlurFilter
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (mediump ) int i) (constant int (1)) 
+      (declare (mediump ) vec4 total)
+      (declare (temporary ) vec2 assignment_tmp)
+      (assign  (xy) (var_ref assignment_tmp)  (expression vec2 * (var_ref u_blurDirection) (var_ref u_texelSize) ) ) 
+      (declare (temporary ) vec2 assignment_tmp@58)
+      (assign  (xy) (var_ref assignment_tmp@58)  (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (0.000000 0.000000 0.000000 1.000000)) ) )(expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) 
+      (declare (temporary ) vec2 assignment_tmp@59)
+      (assign  (xy) (var_ref assignment_tmp@59)  (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (1.000000 1.000000 0.000000 1.000000)) ) )(expression vec2 neg (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) ) 
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) vec4 assignment_tmp@60)
+      (assign  (xyzw) (var_ref total)  (expression vec4 * (tex vec4 (var_ref s_sampler)  (var_ref texCoord)  0 1 () )(array_ref (var_ref u_gaussianKernel) (constant int (0)) ) ) ) 
+      (declare (temporary ) int assignment_tmp@61)
+      (assign  (x) (var_ref i)  (constant int (1)) ) 
+      (loop (
+        (if (expression bool >= (var_ref i) (var_ref u_gaussianKernelHalfSize) ) (
+          break
+        )
+        ())
+
+        (declare (temporary ) vec2 assignment_tmp@62)
+        (assign  (xy) (var_ref assignment_tmp@62)  (expression vec2 * (var_ref assignment_tmp) (array_ref (var_ref u_gaussianKernelOffset) (var_ref i) ) ) ) 
+        (declare (temporary ) vec2 clamp_retval)
+        (declare (temporary ) vec2 x)
+        (declare (temporary ) vec4 texture2D_retval@63)
+        (assign  (xyzw) (var_ref total)  (expression vec4 + (var_ref total) (expression vec4 * (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (expression vec2 + (var_ref texCoord) (var_ref assignment_tmp@62) ) (var_ref assignment_tmp@58) ) (var_ref assignment_tmp@59) )  0 1 () )(array_ref (var_ref u_gaussianKernel) (var_ref i) ) ) ) ) 
+        (declare (temporary ) vec2 clamp_retval@64)
+        (declare (temporary ) vec2 x@65)
+        (declare (temporary ) vec4 texture2D_retval@66)
+        (assign  (xyzw) (var_ref total)  (expression vec4 + (var_ref total) (expression vec4 * (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (expression vec2 + (var_ref texCoord) (expression vec2 neg (var_ref assignment_tmp@62) ) ) (var_ref assignment_tmp@58) ) (var_ref assignment_tmp@59) )  0 1 () )(array_ref (var_ref u_gaussianKernel) (var_ref i) ) ) ) ) 
+        (assign  (x) (var_ref i)  (expression int + (var_ref i) (constant int (1)) ) ) 
+      ))
+
+      (assign  (xyzw) (var_ref color)  (var_ref total) ) 
+    ))
+
+)
+
+( function applyAlphaBlur
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (mediump ) int i) (constant int (1)) 
+      (declare (mediump ) float total)
+      (declare (temporary ) vec2 assignment_tmp)
+      (assign  (xy) (var_ref assignment_tmp)  (expression vec2 * (var_ref u_blurDirection) (var_ref u_texelSize) ) ) 
+      (declare (temporary ) vec2 assignment_tmp@67)
+      (assign  (xy) (var_ref assignment_tmp@67)  (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (0.000000 0.000000 0.000000 1.000000)) ) )(expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) 
+      (declare (temporary ) vec2 assignment_tmp@68)
+      (assign  (xy) (var_ref assignment_tmp@68)  (expression vec2 + (swiz xy (expression vec4 * (var_ref u_textureSpaceMatrix) (constant vec4 (1.000000 1.000000 0.000000 1.000000)) ) )(expression vec2 neg (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) ) 
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) float assignment_tmp@69)
+      (assign  (x) (var_ref total)  (expression float * (swiz w (tex vec4 (var_ref s_sampler)  (var_ref texCoord)  0 1 () ))(array_ref (var_ref u_gaussianKernel) (constant int (0)) ) ) ) 
+      (declare (temporary ) int assignment_tmp@70)
+      (assign  (x) (var_ref i)  (constant int (1)) ) 
+      (loop (
+        (if (expression bool >= (var_ref i) (var_ref u_gaussianKernelHalfSize) ) (
+          break
+        )
+        ())
+
+        (declare (temporary ) vec2 assignment_tmp@71)
+        (assign  (xy) (var_ref assignment_tmp@71)  (expression vec2 * (var_ref assignment_tmp) (array_ref (var_ref u_gaussianKernelOffset) (var_ref i) ) ) ) 
+        (declare (temporary ) vec2 clamp_retval)
+        (declare (temporary ) vec2 x)
+        (declare (temporary ) vec4 texture2D_retval@72)
+        (assign  (x) (var_ref total)  (expression float + (var_ref total) (expression float * (swiz w (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (expression vec2 + (var_ref texCoord) (var_ref assignment_tmp@71) ) (var_ref assignment_tmp@67) ) (var_ref assignment_tmp@68) )  0 1 () ))(array_ref (var_ref u_gaussianKernel) (var_ref i) ) ) ) ) 
+        (declare (temporary ) vec2 clamp_retval@73)
+        (declare (temporary ) vec2 x@74)
+        (declare (temporary ) vec4 texture2D_retval@75)
+        (assign  (x) (var_ref total)  (expression float + (var_ref total) (expression float * (swiz w (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (expression vec2 + (var_ref texCoord) (expression vec2 neg (var_ref assignment_tmp@71) ) ) (var_ref assignment_tmp@67) ) (var_ref assignment_tmp@68) )  0 1 () ))(array_ref (var_ref u_gaussianKernel) (var_ref i) ) ) ) ) 
+        (assign  (x) (var_ref i)  (expression int + (var_ref i) (constant int (1)) ) ) 
+      ))
+
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (xyz) (var_ref vec_ctor)  (constant vec3 (0.000000 0.000000 0.000000)) ) 
+      (assign  (w) (var_ref vec_ctor)  (var_ref total) ) 
+      (assign  (xyzw) (var_ref color)  (var_ref vec_ctor) ) 
+    ))
+
+)
+
+( function applyAlphaToShadow
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec2 clamp_retval)
+      (declare (temporary ) vec2 minVal)
+      (declare (temporary ) vec2 maxVal)
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref u_color) ) ) 
+      (declare (temporary ) vec4 texture2D_retval)
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (swiz w (tex vec4 (var_ref s_sampler)  (expression vec2 min (expression vec2 max (var_ref texCoord) (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) (expression vec2 + (constant vec2 (1.000000 1.000000)) (expression vec2 neg (expression vec2 / (var_ref u_texelSize) (constant float (2.000000)) ) ) ) )  0 1 () ))) ) 
+    ))
+
+)
+
+( function sourceOver
+  (signature vec4
+    (parameters
+      (declare (in mediump ) vec4 src)
+      (declare (in mediump ) vec4 dst)
+    )
+    (
+      (return (expression vec4 + (var_ref src) (expression vec4 * (var_ref dst) (expression float + (constant float (1.000000)) (expression float neg (swiz w (var_ref src) )) ) ) ) )
+    ))
+
+)
+
+( function applyContentTexture
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) vec4 sourceOver_retval)
+      (call sourceOver (var_ref sourceOver_retval)  ((tex vec4 (var_ref s_contentTexture)  (var_ref texCoord)  0 1 () )(var_ref color) ))
+
+      (assign  (xyzw) (var_ref color)  (var_ref sourceOver_retval) ) 
+    ))
+
+)
+
+( function applyTextureExternalOES
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+      (declare (in mediump ) vec2 texCoord)
+    )
+    (
+      (declare (temporary ) vec4 texture2D_retval)
+      (declare (temporary ) vec4 sourceOver_retval)
+      (call sourceOver (var_ref sourceOver_retval)  ((tex vec4 (var_ref s_externalOESTexture)  (var_ref texCoord)  0 1 () )(var_ref color) ))
+
+      (assign  (xyzw) (var_ref color)  (var_ref sourceOver_retval) ) 
+    ))
+
+)
+
+( function applySolidColor
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref u_color) ) ) 
+    ))
+
+)
+
+( function ellipsisDist
+  (signature float
+    (parameters
+      (declare (in highp ) vec2 p)
+      (declare (in highp ) vec2 radius)
+    )
+    (
+      (declare (temporary ) bool execute_flag)
+      (assign  (x) (var_ref execute_flag)  (constant bool (1)) ) 
+      (declare (temporary ) float return_value)
+      (declare (temporary ) bool return_flag)
+      (assign  (x) (var_ref return_flag)  (constant bool (0)) ) 
+      (if (expression bool all_equal (var_ref radius) (constant vec2 (0.000000 0.000000)) ) (
+        (assign  (x) (var_ref return_value)  (constant float (0.000000)) ) 
+        (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+        (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+      )
+      (
+        (declare (temporary ) vec2 assignment_tmp)
+        (assign  (xy) (var_ref assignment_tmp)  (expression vec2 / (var_ref p) (var_ref radius) ) ) 
+        (declare (temporary ) vec2 assignment_tmp@76)
+        (assign  (xy) (var_ref assignment_tmp@76)  (expression vec2 / (expression vec2 * (constant float (2.000000)) (var_ref assignment_tmp) ) (var_ref radius) ) ) 
+        (declare (temporary ) float dot_retval)
+        (declare (temporary ) float length_retval)
+        (assign  (x) (var_ref return_value)  (expression float / (expression float + (expression float dot (var_ref assignment_tmp) (var_ref assignment_tmp) ) (constant float (-1.000000)) ) (expression float sqrt (expression float dot (var_ref assignment_tmp@76) (var_ref assignment_tmp@76) ) ) ) ) 
+        (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+        (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+      ))
+
+      (return (var_ref return_value) )
+    ))
+
+)
+
+( function ellipsisCoverage
+  (signature float
+    (parameters
+      (declare (in highp ) vec2 point)
+      (declare (in highp ) vec2 center)
+      (declare (in highp ) vec2 radius)
+    )
+    (
+      (declare (temporary ) float ellipsisDist_retval)
+      (call ellipsisDist (var_ref ellipsisDist_retval)  ((expression vec2 + (var_ref point) (expression vec2 neg (var_ref center) ) ) (var_ref radius) ))
+
+      (declare (temporary ) float clamp_retval)
+      (declare (temporary ) float x)
+      (declare (temporary ) float minVal)
+      (declare (temporary ) float maxVal)
+      (assign  (x) (var_ref clamp_retval)  (expression float sat (expression float + (constant float (0.500000)) (expression float neg (var_ref ellipsisDist_retval) ) ) ) ) 
+      (return (var_ref clamp_retval) )
+    ))
+
+)
+
+( function roundedRectCoverage
+  (signature float
+    (parameters
+      (declare (in highp ) vec2 p)
+      (declare (in highp ) vec4 bounds)
+      (declare (in highp ) vec2 topLeftRadii)
+      (declare (in highp ) vec2 topRightRadii)
+      (declare (in highp ) vec2 bottomLeftRadii)
+      (declare (in highp ) vec2 bottomRightRadii)
+    )
+    (
+      (declare (temporary ) bool execute_flag)
+      (assign  (x) (var_ref execute_flag)  (constant bool (1)) ) 
+      (declare (temporary ) float return_value)
+      (declare (temporary ) bool return_flag)
+      (assign  (x) (var_ref return_flag)  (constant bool (0)) ) 
+      (declare (highp ) vec2 bottomRightCenter)
+      (declare (highp ) vec2 bottomLeftCenter)
+      (declare (highp ) vec2 topRightCenter)
+      (if (expression bool || (expression bool || (expression bool || (expression bool < (swiz x (var_ref p) )(swiz x (var_ref bounds) )) (expression bool < (swiz y (var_ref p) )(swiz y (var_ref bounds) )) ) (expression bool >= (swiz x (var_ref p) )(swiz z (var_ref bounds) )) ) (expression bool >= (swiz y (var_ref p) )(swiz w (var_ref bounds) )) ) (
+        (assign  (x) (var_ref return_value)  (constant float (0.000000)) ) 
+        (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+        (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+      )
+      (
+        (declare (temporary ) vec2 assignment_tmp)
+        (assign  (xy) (var_ref assignment_tmp)  (expression vec2 + (swiz xy (var_ref bounds) )(var_ref topLeftRadii) ) ) 
+        (declare (temporary ) vec2 assignment_tmp@77)
+        (assign  (xy) (var_ref topRightCenter)  (expression vec2 + (swiz zy (var_ref bounds) )(expression vec2 * (var_ref topRightRadii) (constant vec2 (-1.000000 1.000000)) ) ) ) 
+        (declare (temporary ) vec2 assignment_tmp@78)
+        (assign  (xy) (var_ref bottomLeftCenter)  (expression vec2 + (swiz xw (var_ref bounds) )(expression vec2 * (var_ref bottomLeftRadii) (constant vec2 (1.000000 -1.000000)) ) ) ) 
+        (declare (temporary ) vec2 assignment_tmp@79)
+        (assign  (xy) (var_ref bottomRightCenter)  (expression vec2 + (swiz zw (var_ref bounds) )(expression vec2 neg (var_ref bottomRightRadii) ) ) ) 
+        (if (expression bool && (expression bool < (swiz x (var_ref p) )(swiz x (var_ref assignment_tmp) )) (expression bool < (swiz y (var_ref p) )(swiz y (var_ref assignment_tmp) )) ) (
+          (declare (temporary ) float ellipsisCoverage_retval)
+          (call ellipsisCoverage (var_ref ellipsisCoverage_retval)  ((var_ref p) (var_ref assignment_tmp) (var_ref topLeftRadii) ))
+
+          (assign  (x) (var_ref return_value)  (var_ref ellipsisCoverage_retval) ) 
+          (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+          (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+        )
+        (
+          (if (expression bool && (expression bool < (swiz x (var_ref topRightCenter) )(swiz x (var_ref p) )) (expression bool < (swiz y (var_ref p) )(swiz y (var_ref topRightCenter) )) ) (
+            (declare (temporary ) float ellipsisCoverage_retval@80)
+            (call ellipsisCoverage (var_ref ellipsisCoverage_retval@80)  ((var_ref p) (var_ref topRightCenter) (var_ref topRightRadii) ))
+
+            (assign  (x) (var_ref return_value)  (var_ref ellipsisCoverage_retval@80) ) 
+            (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+            (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+          )
+          (
+            (if (expression bool && (expression bool < (swiz x (var_ref p) )(swiz x (var_ref bottomLeftCenter) )) (expression bool < (swiz y (var_ref bottomLeftCenter) )(swiz y (var_ref p) )) ) (
+              (declare (temporary ) float ellipsisCoverage_retval@81)
+              (call ellipsisCoverage (var_ref ellipsisCoverage_retval@81)  ((var_ref p) (var_ref bottomLeftCenter) (var_ref bottomLeftRadii) ))
+
+              (assign  (x) (var_ref return_value)  (var_ref ellipsisCoverage_retval@81) ) 
+              (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+              (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+            )
+            (
+              (if (expression bool && (expression bool < (swiz x (var_ref bottomRightCenter) )(swiz x (var_ref p) )) (expression bool < (swiz y (var_ref bottomRightCenter) )(swiz y (var_ref p) )) ) (
+                (declare (temporary ) float ellipsisCoverage_retval@82)
+                (call ellipsisCoverage (var_ref ellipsisCoverage_retval@82)  ((var_ref p) (var_ref bottomRightCenter) (var_ref bottomRightRadii) ))
+
+                (assign  (x) (var_ref return_value)  (var_ref ellipsisCoverage_retval@82) ) 
+                (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+                (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+              )
+              (
+                (assign  (x) (var_ref return_value)  (constant float (1.000000)) ) 
+                (assign  (x) (var_ref return_flag)  (constant bool (1)) ) 
+                (assign  (x) (var_ref execute_flag)  (constant bool (0)) ) 
+              ))
+
+            ))
+
+          ))
+
+        ))
+
+      ))
+
+      (return (var_ref return_value) )
+    ))
+
+)
+
+( function applyRoundedRectClip
+  (signature void
+    (parameters
+      (declare (inout mediump ) vec4 color)
+    )
+    (
+      (declare (mediump ) int rectIndex) (constant int (0)) 
+      (declare (temporary ) int assignment_tmp)
+      (assign  (x) (var_ref rectIndex)  (constant int (0)) ) 
+      (loop (
+        (if (expression bool >= (var_ref rectIndex) (constant int (10)) ) (
+          break
+        )
+        ())
+
+        (if (expression bool >= (var_ref rectIndex) (var_ref u_roundedRectNumber) ) (
+          break
+        )
+        ())
+
+        (declare (temporary ) vec4 assignment_tmp@83)
+        (declare (temporary ) vec4 vec_ctor)
+        (assign  (xy) (var_ref vec_ctor)  (swiz xy (array_ref (var_ref u_roundedRect) (expression int * (var_ref rectIndex) (constant int (3)) ) ) )) 
+        (assign  (zw) (var_ref vec_ctor)  (expression vec2 + (swiz xy (array_ref (var_ref u_roundedRect) (expression int * (var_ref rectIndex) (constant int (3)) ) ) )(swiz zw (array_ref (var_ref u_roundedRect) (expression int * (var_ref rectIndex) (constant int (3)) ) ) )) ) 
+        (declare (temporary ) vec2 assignment_tmp@84)
+        (declare (temporary ) vec2 assignment_tmp@85)
+        (declare (temporary ) vec2 assignment_tmp@86)
+        (declare (temporary ) vec2 assignment_tmp@87)
+        (declare (temporary ) float roundedRectCoverage_retval)
+        (call roundedRectCoverage (var_ref roundedRectCoverage_retval)  ((swiz xy (expression vec4 * (array_ref (var_ref u_roundedRectInverseTransformMatrix) (var_ref rectIndex) ) (var_ref v_nonProjectedPosition) ) )(var_ref vec_ctor) (swiz xy (array_ref (var_ref u_roundedRect) (expression int + (expression int * (var_ref rectIndex) (constant int (3)) ) (constant int (1)) ) ) )(swiz zw (array_ref (var_ref u_roundedRect) (expression int + (expression int * (var_ref rectIndex) (constant int (3)) ) (constant int (1)) ) ) )(swiz xy (array_ref (var_ref u_roundedRect) (expression int + (expression int * (var_ref rectIndex) (constant int (3)) ) (constant int (2)) ) ) )(swiz zw (array_ref (var_ref u_roundedRect) (expression int + (expression int * (var_ref rectIndex) (constant int (3)) ) (constant int (2)) ) ) )))
+
+        (discard  (expression bool == (var_ref roundedRectCoverage_retval) (constant float (0.000000)) ) )
+        (assign  (xyzw) (var_ref color)  (expression vec4 * (var_ref color) (var_ref roundedRectCoverage_retval) ) ) 
+        (assign  (x) (var_ref rectIndex)  (expression int + (var_ref rectIndex) (constant int (1)) ) ) 
+      ))
+
+    ))
+
+)
+
+( function main
+  (signature void
+    (parameters
+    )
+    (
+      (declare (mediump ) vec2 texCoord)
+      (declare (mediump ) vec4 color) (constant vec4 (1.000000 1.000000 1.000000 1.000000)) 
+      (declare (temporary ) vec4 assignment_tmp)
+      (assign  (xyzw) (var_ref color)  (constant vec4 (1.000000 1.000000 1.000000 1.000000)) ) 
+      (declare (temporary ) vec2 vertexTransformTexCoord_retval)
+      (call vertexTransformTexCoord (var_ref vertexTransformTexCoord_retval)  ())
+
+      (assign  (xy) (var_ref texCoord)  (var_ref vertexTransformTexCoord_retval) ) 
+      (call noop  ((var_ref texCoord) ))
+
+      (call noop  ((var_ref texCoord) ))
+
+      (call applyTextureRGB  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) (var_ref texCoord) ))
+
+      (call noop  ((var_ref color) ))
+
+      (assign  (xyzw) (var_ref gl_FragColor)  (var_ref color) ) 
+    ))
+
+)
+
+)
+(
+(declare (location=0 shader_out highp ) vec4 gl_Position)
+(declare (location=32 component=0 shader_out highp ) vec2 v_transformedTexCoord)
+(declare (location=15 shader_in highp ) vec4 a_vertex)
+(declare (uniform highp ) mat4 u_modelViewMatrix)
+(declare (uniform highp ) mat4 u_projectionMatrix)
+(declare (uniform highp ) mat4 u_textureSpaceMatrix)
+( function main
+  (signature void
+    (parameters
+    )
+    (
+      (declare (temporary ) vec2 assignment_tmp)
+      (assign  (xy) (var_ref assignment_tmp)  (swiz xy (var_ref a_vertex) )) 
+      (declare (temporary ) vec4 vec_ctor)
+      (assign  (zw) (var_ref vec_ctor)  (constant vec2 (0.000000 1.000000)) ) 
+      (assign  (xy) (var_ref vec_ctor)  (var_ref assignment_tmp) ) 
+      (declare (temporary ) vec4 flattening_tmp)
+      (assign  (xyzw) (var_ref flattening_tmp)  (expression vec4 + (expression vec4 + (expression vec4 + (expression vec4 * (array_ref (var_ref u_textureSpaceMatrix) (constant int (0)) ) (swiz x (var_ref vec_ctor) )) (expression vec4 * (array_ref (var_ref u_textureSpaceMatrix) (constant int (1)) ) (swiz y (var_ref vec_ctor) )) ) (expression vec4 * (array_ref (var_ref u_textureSpaceMatrix) (constant int (2)) ) (swiz z (var_ref vec_ctor) )) ) (expression vec4 * (array_ref (var_ref u_textureSpaceMatrix) (constant int (3)) ) (swiz w (var_ref vec_ctor) )) ) ) 
+      (assign  (xy) (var_ref v_transformedTexCoord)  (swiz xy (var_ref flattening_tmp) )) 
+      (declare (temporary ) vec4 toViewportSpace_retval)
+      (declare (temporary ) vec4 vec_ctor@88)
+      (assign  (zw) (var_ref vec_ctor@88)  (constant vec2 (0.000000 1.000000)) ) 
+      (assign  (xy) (var_ref vec_ctor@88)  (var_ref assignment_tmp) ) 
+      (declare (temporary ) vec4 flattening_tmp@89)
+      (assign  (xyzw) (var_ref flattening_tmp@89)  (expression vec4 + (expression vec4 + (expression vec4 + (expression vec4 * (array_ref (var_ref u_modelViewMatrix) (constant int (0)) ) (swiz x (var_ref vec_ctor@88) )) (expression vec4 * (array_ref (var_ref u_modelViewMatrix) (constant int (1)) ) (swiz y (var_ref vec_ctor@88) )) ) (expression vec4 * (array_ref (var_ref u_modelViewMatrix) (constant int (2)) ) (swiz z (var_ref vec_ctor@88) )) ) (expression vec4 * (array_ref (var_ref u_modelViewMatrix) (constant int (3)) ) (swiz w (var_ref vec_ctor@88) )) ) ) 
+      (assign  (xyzw) (var_ref toViewportSpace_retval)  (var_ref flattening_tmp@89) ) 
+      (declare (temporary ) vec4 flattening_tmp@90)
+      (assign  (xyzw) (var_ref flattening_tmp@90)  (expression vec4 + (expression vec4 + (expression vec4 + (expression vec4 * (array_ref (var_ref u_projectionMatrix) (constant int (0)) ) (swiz x (var_ref toViewportSpace_retval) )) (expression vec4 * (array_ref (var_ref u_projectionMatrix) (constant int (1)) ) (swiz y (var_ref toViewportSpace_retval) )) ) (expression vec4 * (array_ref (var_ref u_projectionMatrix) (constant int (2)) ) (swiz z (var_ref toViewportSpace_retval) )) ) (expression vec4 * (array_ref (var_ref u_projectionMatrix) (constant int (3)) ) (swiz w (var_ref toViewportSpace_retval) )) ) ) 
+      (assign  (xyzw) (var_ref gl_Position)  (var_ref flattening_tmp@90) ) 
+    ))
+
+)
+
+)
+(
+(declare (location=32 component=0 shader_in mediump ) vec2 v_transformedTexCoord)
+(declare (location=2 shader_out mediump ) vec4 gl_FragColor)
+(declare (uniform highp ) mat4 u_textureColorSpaceMatrix)
+(declare (uniform lowp ) sampler2D s_sampler)
+( function main
+  (signature void
+    (parameters
+    )
+    (
+      (declare (temporary mediump ) vec4 color)
+      (declare (temporary ) vec4 flattening_tmp)
+      (declare (temporary ) vec4 mat_op_to_vec)
+      (assign  (xyzw) (var_ref mat_op_to_vec)  (tex vec4 (var_ref s_sampler)  (var_ref v_transformedTexCoord)  0 1 () )) 
+      (assign  (xyzw) (var_ref flattening_tmp)  (expression vec4 + (expression vec4 + (expression vec4 + (expression vec4 * (array_ref (var_ref u_textureColorSpaceMatrix) (constant int (0)) ) (swiz x (var_ref mat_op_to_vec) )) (expression vec4 * (array_ref (var_ref u_textureColorSpaceMatrix) (constant int (1)) ) (swiz y (var_ref mat_op_to_vec) )) ) (expression vec4 * (array_ref (var_ref u_textureColorSpaceMatrix) (constant int (2)) ) (swiz z (var_ref mat_op_to_vec) )) ) (expression vec4 * (array_ref (var_ref u_textureColorSpaceMatrix) (constant int (3)) ) (swiz w (var_ref mat_op_to_vec) )) ) ) 
+      (assign  (xyzw) (var_ref color)  (var_ref flattening_tmp) ) 
+      (assign  (xyzw) (var_ref gl_FragColor)  (var_ref color) ) 
+    ))
+
+)
+
+)
+shader: MESA_SHADER_VERTEX
+name: GLSL3
+inputs: 1
+outputs: 0
+uniforms: 0
+shared: 0
+decl_var uniform INTERP_MODE_NONE highp mat4 u_modelViewMatrix (0, 0, 0)
+decl_var uniform INTERP_MODE_NONE highp mat4 u_projectionMatrix (1, 0, 0)
+decl_var uniform INTERP_MODE_NONE highp mat4 u_textureSpaceMatrix (2, 0, 0)
+decl_var shader_in INTERP_MODE_NONE highp vec4 a_vertex (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE mediump vec2 v_transformedTexCoord (VARYING_SLOT_VAR0.xy, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_177 = deref_var &a_vertex (shader_in vec4) 
+	vec4 32 ssa_182 = intrinsic load_deref (ssa_177) (0) /* access=0 */
+	vec1 32 ssa_151 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_153 = load_const (0x00000001 /* 0.000000 */)
+	vec1 32 ssa_155 = load_const (0x00000002 /* 0.000000 */)
+	vec1 32 ssa_157 = load_const (0x00000003 /* 0.000000 */)
+	vec1 32 ssa_15 = deref_var &u_textureSpaceMatrix (uniform mat4) 
+	vec1 32 ssa_16 = deref_array &(*ssa_15)[0] (uniform vec4) /* &u_textureSpaceMatrix[0] */
+	vec4 32 ssa_17 = intrinsic load_deref (ssa_16) (0) /* access=0 */
+	vec4 32 ssa_21 = fmul ssa_17, ssa_182.xxxx
+	vec1 32 ssa_25 = deref_array &(*ssa_15)[1] (uniform vec4) /* &u_textureSpaceMatrix[1] */
+	vec4 32 ssa_26 = intrinsic load_deref (ssa_25) (0) /* access=0 */
+	vec4 32 ssa_30 = fmul ssa_26, ssa_182.yyyy
+	vec1 32 ssa_45 = deref_array &(*ssa_15)[3] (uniform vec4) /* &u_textureSpaceMatrix[3] */
+	vec4 32 ssa_46 = intrinsic load_deref (ssa_45) (0) /* access=0 */
+	vec4 32 ssa_259 = fadd ssa_21, ssa_46
+	vec4 32 ssa_260 = fadd ssa_259, ssa_30
+	vec1 32 ssa_67 = deref_var &u_modelViewMatrix (uniform mat4) 
+	vec1 32 ssa_68 = deref_array &(*ssa_67)[0] (uniform vec4) /* &u_modelViewMatrix[0] */
+	vec4 32 ssa_69 = intrinsic load_deref (ssa_68) (0) /* access=0 */
+	vec4 32 ssa_73 = fmul ssa_69, ssa_182.xxxx
+	vec1 32 ssa_77 = deref_array &(*ssa_67)[1] (uniform vec4) /* &u_modelViewMatrix[1] */
+	vec4 32 ssa_78 = intrinsic load_deref (ssa_77) (0) /* access=0 */
+	vec4 32 ssa_82 = fmul ssa_78, ssa_182.yyyy
+	vec1 32 ssa_97 = deref_array &(*ssa_67)[3] (uniform vec4) /* &u_modelViewMatrix[3] */
+	vec4 32 ssa_98 = intrinsic load_deref (ssa_97) (0) /* access=0 */
+	vec4 32 ssa_257 = fadd ssa_73, ssa_98
+	vec4 32 ssa_258 = fadd ssa_257, ssa_82
+	vec1 32 ssa_109 = deref_var &u_projectionMatrix (uniform mat4) 
+	vec1 32 ssa_110 = deref_array &(*ssa_109)[0] (uniform vec4) /* &u_projectionMatrix[0] */
+	vec4 32 ssa_111 = intrinsic load_deref (ssa_110) (0) /* access=0 */
+	vec4 32 ssa_115 = fmul ssa_111, ssa_258.xxxx
+	vec1 32 ssa_119 = deref_array &(*ssa_109)[1] (uniform vec4) /* &u_projectionMatrix[1] */
+	vec4 32 ssa_120 = intrinsic load_deref (ssa_119) (0) /* access=0 */
+	vec4 32 ssa_124 = fmul ssa_120, ssa_258.yyyy
+	vec4 32 ssa_125 = fadd ssa_115, ssa_124
+	vec1 32 ssa_129 = deref_array &(*ssa_109)[2] (uniform vec4) /* &u_projectionMatrix[2] */
+	vec4 32 ssa_130 = intrinsic load_deref (ssa_129) (0) /* access=0 */
+	vec4 32 ssa_134 = fmul ssa_130, ssa_258.zzzz
+	vec4 32 ssa_135 = fadd ssa_125, ssa_134
+	vec1 32 ssa_139 = deref_array &(*ssa_109)[3] (uniform vec4) /* &u_projectionMatrix[3] */
+	vec4 32 ssa_140 = intrinsic load_deref (ssa_139) (0) /* access=0 */
+	vec4 32 ssa_144 = fmul ssa_140, ssa_258.wwww
+	vec4 32 ssa_145 = fadd ssa_135, ssa_144
+	vec1 32 ssa_178 = deref_var &gl_Position (shader_out vec4) 
+	intrinsic store_deref (ssa_178, ssa_145) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	vec1 32 ssa_180 = deref_var &v_transformedTexCoord (shader_out vec2) 
+	vec2 32 ssa_242 = mov ssa_260.xy
+	intrinsic store_deref (ssa_180, ssa_242) (3, 0) /* wrmask=xy */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+shader: MESA_SHADER_FRAGMENT
+name: GLSL3
+inputs: 0
+outputs: 0
+uniforms: 0
+shared: 0
+decl_var shader_in INTERP_MODE_NONE mediump vec2 v_transformedTexCoord (VARYING_SLOT_VAR0.xy, 0, 0)
+decl_var uniform INTERP_MODE_NONE highp mat4 u_textureColorSpaceMatrix (3, 0, 0)
+decl_var uniform INTERP_MODE_NONE lowp sampler2D s_sampler (4, 0, 0)
+decl_var shader_out INTERP_MODE_NONE mediump vec4 gl_FragColor (FRAG_RESULT_COLOR.xyzw, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_50 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_52 = load_const (0x00000001 /* 0.000000 */)
+	vec1 32 ssa_54 = load_const (0x00000002 /* 0.000000 */)
+	vec1 32 ssa_56 = load_const (0x00000003 /* 0.000000 */)
+	vec1 32 ssa_1 = deref_var &s_sampler (uniform sampler2D) 
+	vec1 32 ssa_2 = deref_var &v_transformedTexCoord (shader_in vec2) 
+	vec2 32 ssa_3 = intrinsic load_deref (ssa_2) (0) /* access=0 */
+	vec4 32 ssa_4 = (float32)tex ssa_1 (texture_deref), ssa_1 (sampler_deref), ssa_3 (coord)
+	vec1 32 ssa_8 = deref_var &u_textureColorSpaceMatrix (uniform mat4) 
+	vec1 32 ssa_9 = deref_array &(*ssa_8)[0] (uniform vec4) /* &u_textureColorSpaceMatrix[0] */
+	vec4 32 ssa_10 = intrinsic load_deref (ssa_9) (0) /* access=0 */
+	vec4 32 ssa_14 = fmul ssa_10, ssa_4.xxxx
+	vec1 32 ssa_18 = deref_array &(*ssa_8)[1] (uniform vec4) /* &u_textureColorSpaceMatrix[1] */
+	vec4 32 ssa_19 = intrinsic load_deref (ssa_18) (0) /* access=0 */
+	vec4 32 ssa_23 = fmul ssa_19, ssa_4.yyyy
+	vec4 32 ssa_24 = fadd ssa_14, ssa_23
+	vec1 32 ssa_28 = deref_array &(*ssa_8)[2] (uniform vec4) /* &u_textureColorSpaceMatrix[2] */
+	vec4 32 ssa_29 = intrinsic load_deref (ssa_28) (0) /* access=0 */
+	vec4 32 ssa_33 = fmul ssa_29, ssa_4.zzzz
+	vec4 32 ssa_34 = fadd ssa_24, ssa_33
+	vec1 32 ssa_38 = deref_array &(*ssa_8)[3] (uniform vec4) /* &u_textureColorSpaceMatrix[3] */
+	vec4 32 ssa_39 = intrinsic load_deref (ssa_38) (0) /* access=0 */
+	vec4 32 ssa_43 = fmul ssa_39, ssa_4.wwww
+	vec4 32 ssa_44 = fadd ssa_34, ssa_43
+	vec1 32 ssa_57 = deref_var &gl_FragColor (shader_out vec4) 
+	intrinsic store_deref (ssa_57, ssa_44) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+(
+(declare (uniform ) vec4 gl_CurrentAttribFrag2MESA)
+(declare (location=2 shader_out ) vec4 gl_FragColor)
+( function main
+  (signature void
+    (parameters
+    )
+    (
+      (assign  (xyzw) (var_ref gl_FragColor)  (var_ref gl_CurrentAttribFrag2MESA) ) 
+    ))
+
+)
+
+)
+shader: MESA_SHADER_FRAGMENT
+name: GLSL0
+inputs: 0
+outputs: 0
+uniforms: 0
+shared: 0
+decl_var uniform INTERP_MODE_NONE vec4 gl_CurrentAttribFrag2MESA (0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE vec4 gl_FragColor (FRAG_RESULT_COLOR.xyzw, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_1 = deref_var &gl_CurrentAttribFrag2MESA (uniform vec4) 
+	vec4 32 ssa_4 = intrinsic load_deref (ssa_1) (0) /* access=0 */
+	vec1 32 ssa_2 = deref_var &gl_FragColor (shader_out vec4) 
+	intrinsic store_deref (ssa_2, ssa_4) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+heliotrope: loaded https://en.wikipedia.org/wiki/IRIX
+heliotrope: wrote /var/tmp/sh.ppm (606x610)

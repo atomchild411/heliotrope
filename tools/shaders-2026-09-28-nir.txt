@@ -1,0 +1,300 @@
+NIR before handing off to driver:
+shader: MESA_SHADER_VERTEX
+name: GLSL3
+inputs: 1
+outputs: 2
+uniforms: 12
+ubos: 1
+shared: 0
+decl_var uniform INTERP_MODE_NONE highp mat4 u_modelViewMatrix (0, 0, 0)
+decl_var uniform INTERP_MODE_NONE highp mat4 u_projectionMatrix (1, 4, 0)
+decl_var uniform INTERP_MODE_NONE highp mat4 u_textureSpaceMatrix (2, 8, 0)
+decl_var shader_in INTERP_MODE_NONE highp vec4 a_vertex (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE mediump vec2 v_transformedTexCoord (VARYING_SLOT_VAR0.xy, 1, 0)
+decl_var ubo INTERP_MODE_NONE vec4[12] uniform_0 (0, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_177 = deref_var &a_vertex (shader_in vec4) 
+	vec4 32 ssa_182 = intrinsic load_deref (ssa_177) (0) /* access=0 */
+	vec1 32 ssa_151 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_153 = load_const (0x00000001 /* 0.000000 */)
+	vec1 32 ssa_155 = load_const (0x00000002 /* 0.000000 */)
+	vec1 32 ssa_157 = load_const (0x00000003 /* 0.000000 */)
+	vec1 32 ssa_15 = deref_var &u_textureSpaceMatrix (uniform mat4) 
+	vec1 32 ssa_16 = deref_array &(*ssa_15)[0] (uniform vec4) /* &u_textureSpaceMatrix[0] */
+	vec1 32 ssa_261 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_262 = iadd ssa_261, ssa_151
+	vec1 32 ssa_291 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_292 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_293 = ishl ssa_262, ssa_292
+	vec1 32 ssa_294 = load_const (0x00000080 /* 0.000000 */)
+	vec1 32 ssa_295 = iadd ssa_293, ssa_294
+	vec4 32 ssa_296 = intrinsic load_ubo (ssa_291, ssa_295) (0, 16, 0, 128, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=128 */ /* range=64 */
+	vec4 32 ssa_21 = fmul ssa_296, ssa_182.xxxx
+	vec1 32 ssa_25 = deref_array &(*ssa_15)[1] (uniform vec4) /* &u_textureSpaceMatrix[1] */
+	vec1 32 ssa_264 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_265 = iadd ssa_264, ssa_153
+	vec1 32 ssa_297 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_298 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_299 = ishl ssa_265, ssa_298
+	vec1 32 ssa_300 = load_const (0x00000080 /* 0.000000 */)
+	vec1 32 ssa_301 = iadd ssa_299, ssa_300
+	vec4 32 ssa_302 = intrinsic load_ubo (ssa_297, ssa_301) (0, 16, 0, 128, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=128 */ /* range=64 */
+	vec4 32 ssa_30 = fmul ssa_302, ssa_182.yyyy
+	vec1 32 ssa_45 = deref_array &(*ssa_15)[3] (uniform vec4) /* &u_textureSpaceMatrix[3] */
+	vec1 32 ssa_267 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_268 = iadd ssa_267, ssa_157
+	vec1 32 ssa_303 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_304 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_305 = ishl ssa_268, ssa_304
+	vec1 32 ssa_306 = load_const (0x00000080 /* 0.000000 */)
+	vec1 32 ssa_307 = iadd ssa_305, ssa_306
+	vec4 32 ssa_308 = intrinsic load_ubo (ssa_303, ssa_307) (0, 16, 0, 128, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=128 */ /* range=64 */
+	vec4 32 ssa_259 = fadd ssa_21, ssa_308
+	vec4 32 ssa_260 = fadd ssa_259, ssa_30
+	vec1 32 ssa_67 = deref_var &u_modelViewMatrix (uniform mat4) 
+	vec1 32 ssa_68 = deref_array &(*ssa_67)[0] (uniform vec4) /* &u_modelViewMatrix[0] */
+	vec1 32 ssa_270 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_271 = iadd ssa_270, ssa_151
+	vec1 32 ssa_309 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_310 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_311 = ishl ssa_271, ssa_310
+	vec4 32 ssa_312 = intrinsic load_ubo (ssa_309, ssa_311) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_73 = fmul ssa_312, ssa_182.xxxx
+	vec1 32 ssa_77 = deref_array &(*ssa_67)[1] (uniform vec4) /* &u_modelViewMatrix[1] */
+	vec1 32 ssa_273 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_274 = iadd ssa_273, ssa_153
+	vec1 32 ssa_313 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_314 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_315 = ishl ssa_274, ssa_314
+	vec4 32 ssa_316 = intrinsic load_ubo (ssa_313, ssa_315) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_82 = fmul ssa_316, ssa_182.yyyy
+	vec1 32 ssa_97 = deref_array &(*ssa_67)[3] (uniform vec4) /* &u_modelViewMatrix[3] */
+	vec1 32 ssa_276 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_277 = iadd ssa_276, ssa_157
+	vec1 32 ssa_317 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_318 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_319 = ishl ssa_277, ssa_318
+	vec4 32 ssa_320 = intrinsic load_ubo (ssa_317, ssa_319) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_257 = fadd ssa_73, ssa_320
+	vec4 32 ssa_258 = fadd ssa_257, ssa_82
+	vec1 32 ssa_109 = deref_var &u_projectionMatrix (uniform mat4) 
+	vec1 32 ssa_110 = deref_array &(*ssa_109)[0] (uniform vec4) /* &u_projectionMatrix[0] */
+	vec1 32 ssa_279 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_280 = iadd ssa_279, ssa_151
+	vec1 32 ssa_321 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_322 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_323 = ishl ssa_280, ssa_322
+	vec1 32 ssa_324 = load_const (0x00000040 /* 0.000000 */)
+	vec1 32 ssa_325 = iadd ssa_323, ssa_324
+	vec4 32 ssa_326 = intrinsic load_ubo (ssa_321, ssa_325) (0, 16, 0, 64, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=64 */ /* range=64 */
+	vec4 32 ssa_115 = fmul ssa_326, ssa_258.xxxx
+	vec1 32 ssa_119 = deref_array &(*ssa_109)[1] (uniform vec4) /* &u_projectionMatrix[1] */
+	vec1 32 ssa_282 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_283 = iadd ssa_282, ssa_153
+	vec1 32 ssa_327 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_328 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_329 = ishl ssa_283, ssa_328
+	vec1 32 ssa_330 = load_const (0x00000040 /* 0.000000 */)
+	vec1 32 ssa_331 = iadd ssa_329, ssa_330
+	vec4 32 ssa_332 = intrinsic load_ubo (ssa_327, ssa_331) (0, 16, 0, 64, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=64 */ /* range=64 */
+	vec4 32 ssa_124 = fmul ssa_332, ssa_258.yyyy
+	vec4 32 ssa_125 = fadd ssa_115, ssa_124
+	vec1 32 ssa_129 = deref_array &(*ssa_109)[2] (uniform vec4) /* &u_projectionMatrix[2] */
+	vec1 32 ssa_285 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_286 = iadd ssa_285, ssa_155
+	vec1 32 ssa_333 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_334 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_335 = ishl ssa_286, ssa_334
+	vec1 32 ssa_336 = load_const (0x00000040 /* 0.000000 */)
+	vec1 32 ssa_337 = iadd ssa_335, ssa_336
+	vec4 32 ssa_338 = intrinsic load_ubo (ssa_333, ssa_337) (0, 16, 0, 64, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=64 */ /* range=64 */
+	vec4 32 ssa_134 = fmul ssa_338, ssa_258.zzzz
+	vec4 32 ssa_135 = fadd ssa_125, ssa_134
+	vec1 32 ssa_139 = deref_array &(*ssa_109)[3] (uniform vec4) /* &u_projectionMatrix[3] */
+	vec1 32 ssa_288 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_289 = iadd ssa_288, ssa_157
+	vec1 32 ssa_339 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_340 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_341 = ishl ssa_289, ssa_340
+	vec1 32 ssa_342 = load_const (0x00000040 /* 0.000000 */)
+	vec1 32 ssa_343 = iadd ssa_341, ssa_342
+	vec4 32 ssa_344 = intrinsic load_ubo (ssa_339, ssa_343) (0, 16, 0, 64, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=64 */ /* range=64 */
+	vec4 32 ssa_144 = fmul ssa_344, ssa_258.wwww
+	vec4 32 ssa_145 = fadd ssa_135, ssa_144
+	vec1 32 ssa_178 = deref_var &gl_Position (shader_out vec4) 
+	intrinsic store_deref (ssa_178, ssa_145) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	vec1 32 ssa_180 = deref_var &v_transformedTexCoord (shader_out vec2) 
+	vec2 32 ssa_242 = mov ssa_260.xy
+	intrinsic store_deref (ssa_180, ssa_242) (3, 0) /* wrmask=xy */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+NIR before handing off to driver:
+shader: MESA_SHADER_FRAGMENT
+name: GLSL3
+inputs: 1
+outputs: 1
+uniforms: 4
+ubos: 1
+shared: 0
+decl_var uniform INTERP_MODE_NONE highp mat4 u_textureColorSpaceMatrix (3, 0, 0)
+decl_var uniform INTERP_MODE_NONE lowp sampler2D s_sampler (4, 0, 0)
+decl_var shader_in INTERP_MODE_NONE mediump vec2 v_transformedTexCoord (VARYING_SLOT_VAR0.xy, 0, 0)
+decl_var shader_out INTERP_MODE_NONE mediump vec4 gl_FragColor (FRAG_RESULT_COLOR.xyzw, 0, 0)
+decl_var ubo INTERP_MODE_NONE vec4[4] uniform_0 (0, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_50 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_52 = load_const (0x00000001 /* 0.000000 */)
+	vec1 32 ssa_54 = load_const (0x00000002 /* 0.000000 */)
+	vec1 32 ssa_56 = load_const (0x00000003 /* 0.000000 */)
+	vec1 32 ssa_1 = deref_var &s_sampler (uniform sampler2D) 
+	vec1 32 ssa_2 = deref_var &v_transformedTexCoord (shader_in vec2) 
+	vec2 32 ssa_3 = intrinsic load_deref (ssa_2) (0) /* access=0 */
+	vec4 32 ssa_4 = (float32)tex ssa_3 (coord), 0 (texture), 0 (sampler)
+	vec1 32 ssa_73 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_74 = iadd ssa_73, ssa_50
+	vec1 32 ssa_85 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_86 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_87 = ishl ssa_74, ssa_86
+	vec4 32 ssa_88 = intrinsic load_ubo (ssa_85, ssa_87) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_14 = fmul ssa_88, ssa_4.xxxx
+	vec1 32 ssa_76 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_77 = iadd ssa_76, ssa_52
+	vec1 32 ssa_89 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_90 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_91 = ishl ssa_77, ssa_90
+	vec4 32 ssa_92 = intrinsic load_ubo (ssa_89, ssa_91) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_23 = fmul ssa_92, ssa_4.yyyy
+	vec4 32 ssa_24 = fadd ssa_14, ssa_23
+	vec1 32 ssa_79 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_80 = iadd ssa_79, ssa_54
+	vec1 32 ssa_93 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_94 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_95 = ishl ssa_80, ssa_94
+	vec4 32 ssa_96 = intrinsic load_ubo (ssa_93, ssa_95) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_33 = fmul ssa_96, ssa_4.zzzz
+	vec4 32 ssa_34 = fadd ssa_24, ssa_33
+	vec1 32 ssa_82 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_83 = iadd ssa_82, ssa_56
+	vec1 32 ssa_97 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_98 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_99 = ishl ssa_83, ssa_98
+	vec4 32 ssa_100 = intrinsic load_ubo (ssa_97, ssa_99) (0, 16, 0, 0, 64) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=64 */
+	vec4 32 ssa_43 = fmul ssa_100, ssa_4.wwww
+	vec4 32 ssa_44 = fadd ssa_34, ssa_43
+	vec1 32 ssa_57 = deref_var &gl_FragColor (shader_out vec4) 
+	intrinsic store_deref (ssa_57, ssa_44) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+NIR before handing off to driver:
+shader: MESA_SHADER_FRAGMENT
+name: GLSL0
+inputs: 0
+outputs: 1
+uniforms: 1
+ubos: 1
+shared: 0
+decl_var uniform INTERP_MODE_NONE vec4 gl_CurrentAttribFrag2MESA (0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE vec4 gl_FragColor (FRAG_RESULT_COLOR.xyzw, 0, 0)
+decl_var ubo INTERP_MODE_NONE vec4[1] uniform_0 (0, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_1 = deref_var &gl_CurrentAttribFrag2MESA (uniform vec4) 
+	vec1 32 ssa_7 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_9 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_10 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_11 = ishl ssa_7, ssa_10
+	vec4 32 ssa_12 = intrinsic load_ubo (ssa_9, ssa_11) (0, 1073741824, 0, 0, 16) /* access=0 */ /* align_mul=1073741824 */ /* align_offset=0 */ /* range_base=0 */ /* range=16 */
+	vec1 32 ssa_2 = deref_var &gl_FragColor (shader_out vec4) 
+	intrinsic store_deref (ssa_2, ssa_12) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+NIR before handing off to driver:
+shader: MESA_SHADER_VERTEX
+name: ARB0
+inputs: 0
+outputs: 1
+uniforms: 5
+ubos: 1
+shared: 0
+decl_var uniform INTERP_MODE_NONE vec4[5] state.matrix.mvp.transpose.row[0] (0, 0, 0)
+decl_var shader_out INTERP_MODE_SMOOTH vec4 out_0 (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var ubo INTERP_MODE_NONE vec4[5] uniform_0 (0, 0, 0)
+decl_function main (0 params)
+
+impl main {
+	block block_0:
+	/* preds: */
+	vec1 32 ssa_0 = deref_var &state.matrix.mvp.transpose.row[0] (uniform vec4[5]) 
+	vec1 32 ssa_1 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_2 = deref_array &(*ssa_0)[4] (uniform vec4) /* &state.matrix.mvp.transpose.row[0][4] */
+	vec1 32 ssa_52 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_53 = iadd ssa_52, ssa_1
+	vec1 32 ssa_67 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_68 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_69 = ishl ssa_53, ssa_68
+	vec4 32 ssa_70 = intrinsic load_ubo (ssa_67, ssa_69) (0, 16, 0, 0, 80) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=80 */
+	vec1 32 ssa_6 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_7 = deref_array &(*ssa_0)[0] (uniform vec4) /* &state.matrix.mvp.transpose.row[0][0] */
+	vec1 32 ssa_55 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_56 = iadd ssa_55, ssa_6
+	vec1 32 ssa_71 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_72 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_73 = ishl ssa_56, ssa_72
+	vec4 32 ssa_74 = intrinsic load_ubo (ssa_71, ssa_73) (0, 16, 0, 0, 80) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=80 */
+	vec4 32 ssa_48 = fmul ssa_70.xxxx, ssa_74
+	vec1 32 ssa_16 = load_const (0x00000001 /* 0.000000 */)
+	vec1 32 ssa_17 = deref_array &(*ssa_0)[1] (uniform vec4) /* &state.matrix.mvp.transpose.row[0][1] */
+	vec1 32 ssa_58 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_59 = iadd ssa_58, ssa_16
+	vec1 32 ssa_75 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_76 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_77 = ishl ssa_59, ssa_76
+	vec4 32 ssa_78 = intrinsic load_ubo (ssa_75, ssa_77) (0, 16, 0, 0, 80) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=80 */
+	vec4 32 ssa_20 = fmul ssa_70.yyyy, ssa_78
+	vec4 32 ssa_21 = fadd ssa_20, ssa_48
+	vec1 32 ssa_28 = load_const (0x00000002 /* 0.000000 */)
+	vec1 32 ssa_29 = deref_array &(*ssa_0)[2] (uniform vec4) /* &state.matrix.mvp.transpose.row[0][2] */
+	vec1 32 ssa_61 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_62 = iadd ssa_61, ssa_28
+	vec1 32 ssa_79 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_80 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_81 = ishl ssa_62, ssa_80
+	vec4 32 ssa_82 = intrinsic load_ubo (ssa_79, ssa_81) (0, 16, 0, 0, 80) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=80 */
+	vec4 32 ssa_32 = fmul ssa_70.zzzz, ssa_82
+	vec4 32 ssa_33 = fadd ssa_32, ssa_21
+	vec1 32 ssa_40 = load_const (0x00000003 /* 0.000000 */)
+	vec1 32 ssa_41 = deref_array &(*ssa_0)[3] (uniform vec4) /* &state.matrix.mvp.transpose.row[0][3] */
+	vec1 32 ssa_64 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_65 = iadd ssa_64, ssa_40
+	vec1 32 ssa_83 = load_const (0x00000000 /* 0.000000 */)
+	vec1 32 ssa_84 = load_const (0x00000004 /* 0.000000 */)
+	vec1 32 ssa_85 = ishl ssa_65, ssa_84
+	vec4 32 ssa_86 = intrinsic load_ubo (ssa_83, ssa_85) (0, 16, 0, 0, 80) /* access=0 */ /* align_mul=16 */ /* align_offset=0 */ /* range_base=0 */ /* range=80 */
+	vec4 32 ssa_44 = fmul ssa_70.wwww, ssa_86
+	vec4 32 ssa_45 = fadd ssa_44, ssa_33
+	vec1 32 ssa_47 = deref_var &out_0 (shader_out vec4) 
+	intrinsic store_deref (ssa_47, ssa_45) (15, 0) /* wrmask=xyzw */ /* access=0 */
+	/* succs: block_1 */
+	block block_1:
+}
+
+heliotrope: loaded https://en.wikipedia.org/wiki/IRIX
+heliotrope: wrote /var/tmp/sh.ppm (606x610)
