@@ -1,0 +1,21 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Subject: [PATCH] WTF: IRIX native builds report IRIX64
+
+Cross builds name the system IRIX; CMake on IRIX itself takes uname -s,
+which is IRIX64 on 64-bit kernels.  Match both.
+---
+ Source/WTF/wtf/PlatformWPE.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Source/WTF/wtf/PlatformWPE.cmake b/Source/WTF/wtf/PlatformWPE.cmake
+--- a/Source/WTF/wtf/PlatformWPE.cmake
++++ b/Source/WTF/wtf/PlatformWPE.cmake
+@@ -79,7 +79,7 @@
+ )
+ 
+ # Real-time threads are Linux's (rtkit over D-Bus, eventfd).
+-if (CMAKE_SYSTEM_NAME STREQUAL "IRIX")
++if (CMAKE_SYSTEM_NAME MATCHES "^IRIX")
+     list(REMOVE_ITEM WTF_SOURCES linux/RealTimeThreads.cpp)
+ endif ()
+ 
