@@ -1,0 +1,23 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Subject: [PATCH] WTF: IRIX thread-key sentinel is a constant
+
+IRIX's limits.h defines PTHREAD_KEYS_MAX as _sysconf(104), so it cannot
+initialise the constexpr InvalidThreadSpecificKey.  IRIX pthread keys
+are ints counted from 0; use -1.
+---
+--- a/Source/WTF/wtf/ThreadingPrimitives.h
++++ b/Source/WTF/wtf/ThreadingPrimitives.h
+@@ -116,7 +116,13 @@
+ 
+ #if USE(PTHREADS)
+ 
++#if OS(IRIX)
++// IRIX's PTHREAD_KEYS_MAX is a _sysconf() call, not a constant.  Keys are
++// ints counted from 0, so -1 is never a valid one.
++static constexpr ThreadSpecificKey InvalidThreadSpecificKey = -1;
++#else
+ static constexpr ThreadSpecificKey InvalidThreadSpecificKey = PTHREAD_KEYS_MAX;
++#endif
+ 
+ inline void threadSpecificKeyCreate(ThreadSpecificKey* key, void (*destructor)(void *))
+ {
