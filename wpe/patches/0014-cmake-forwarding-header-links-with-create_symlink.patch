@@ -1,0 +1,64 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Subject: [PATCH] cmake: forwarding-header links with cmake -E create_symlink
+
+The forwarding headers' directory links were made with `ln -n -s -f`.
+IRIX's ln has no -n (UX:ln: Illegal option -- n), so a native IRIX
+build stopped there. cmake -E create_symlink is portable and replaces a
+link already there, as -n -f did.
+---
+--- a/Source/JavaScriptCore/GLib.cmake
++++ b/Source/JavaScriptCore/GLib.cmake
+@@ -71,7 +71,7 @@
+ add_custom_command(
+     OUTPUT ${JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR}/jsc
+     DEPENDS ${JAVASCRIPTCORE_DIR}/API/glib
+-    COMMAND ln -n -s -f ${JAVASCRIPTCORE_DIR}/API/glib ${JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR}/jsc
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${JAVASCRIPTCORE_DIR}/API/glib ${JavaScriptCoreGLib_FRAMEWORK_HEADERS_DIR}/jsc
+     VERBATIM
+ )
+ add_custom_target(JSC-fake-api-headers
+--- a/Source/WebKit/PlatformGTKDeprecated.cmake
++++ b/Source/WebKit/PlatformGTKDeprecated.cmake
+@@ -173,5 +173,5 @@
+ add_custom_command(
+     OUTPUT ${WebKitGTK_FRAMEWORK_HEADERS_DIR}/webkitgtk-web-process-extension/webkitdom
+     DEPENDS ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/gtk/DOM
+-    COMMAND ln -n -s -f ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/gtk/DOM ${WebKitGTK_FRAMEWORK_HEADERS_DIR}/webkitgtk-web-process-extension/webkitdom
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/gtk/DOM ${WebKitGTK_FRAMEWORK_HEADERS_DIR}/webkitgtk-web-process-extension/webkitdom
+ )
+--- a/Source/WebKit/PlatformWPE.cmake
++++ b/Source/WebKit/PlatformWPE.cmake
+@@ -73,19 +73,19 @@
+ add_custom_command(
+     OUTPUT ${FORWARDING_HEADERS_WPE_DIR}/wpe
+     DEPENDS ${WEBKIT_DIR}/UIProcess/API/wpe
+-    COMMAND ln -n -s -f ${WEBKIT_DIR}/UIProcess/API/wpe ${FORWARDING_HEADERS_WPE_DIR}/wpe
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${WEBKIT_DIR}/UIProcess/API/wpe ${FORWARDING_HEADERS_WPE_DIR}/wpe
+ )
+ 
+ add_custom_command(
+     OUTPUT ${FORWARDING_HEADERS_WPE_EXTENSION_DIR}/wpe
+     DEPENDS ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe
+-    COMMAND ln -n -s -f ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe ${FORWARDING_HEADERS_WPE_EXTENSION_DIR}/wpe
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe ${FORWARDING_HEADERS_WPE_EXTENSION_DIR}/wpe
+ )
+ 
+ add_custom_command(
+     OUTPUT ${FORWARDING_HEADERS_WPE_JSC_DIR}/jsc
+     DEPENDS ${JAVASCRIPTCORE_DIR}/API/glib/
+-    COMMAND ln -n -s -f ${JAVASCRIPTCORE_DIR}/API/glib ${FORWARDING_HEADERS_WPE_JSC_DIR}/jsc
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${JAVASCRIPTCORE_DIR}/API/glib ${FORWARDING_HEADERS_WPE_JSC_DIR}/jsc
+     VERBATIM
+ )
+ 
+--- a/Source/WebKit/PlatformWPEDeprecated.cmake
++++ b/Source/WebKit/PlatformWPEDeprecated.cmake
+@@ -38,7 +38,7 @@
+ add_custom_command(
+     OUTPUT ${FORWARDING_HEADERS_WPE_DOM_DIR}/wpe
+     DEPENDS ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe/DOM
+-    COMMAND ln -n -s -f ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe/DOM ${FORWARDING_HEADERS_WPE_DOM_DIR}/wpe
++    COMMAND ${CMAKE_COMMAND} -E create_symlink ${WEBKIT_DIR}/WebProcess/InjectedBundle/API/wpe/DOM ${FORWARDING_HEADERS_WPE_DOM_DIR}/wpe
+     VERBATIM
+ )
+ 
