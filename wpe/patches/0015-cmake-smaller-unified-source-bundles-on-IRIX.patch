@@ -1,0 +1,25 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Subject: [PATCH] cmake: smaller unified source bundles for WebCore and WebKit on IRIX
+
+Native IRIX clang is n32: a compiler process can allocate about 1.7 GB.
+WebCore's bindings bundles of 8 files (JSDOMWindow.cpp and its
+neighbours) need more, and clang stops with "LLVM ERROR: out of memory".
+Merge 4 files per bundle for WebCore and WebKit on IRIX
+(WEBKIT_MAX_BUNDLE_SIZE in the cache); JavaScriptCore and WTF keep 8.
+---
+--- a/Source/cmake/WebKitMacros.cmake
++++ b/Source/cmake/WebKitMacros.cmake
+@@ -17,6 +17,13 @@
+     if (MSVC AND ${_framework} STREQUAL "WebCore" AND ${_framework}_LIBRARY_TYPE STREQUAL "STATIC")
+         list(APPEND gusb_args --max-bundle-size 16)
+     endif ()
++    # IRIX: native clang is n32, so a compiler process has under 2 GB of address space; WebCore's
++    # bindings bundles of 8 files need more than that. Smaller bundles (WEBKIT_MAX_BUNDLE_SIZE, 4 by
++    # default) for WebCore and WebKit; JavaScriptCore's and WTF's fit as they are.
++    if (CMAKE_SYSTEM_NAME MATCHES "^IRIX" AND (${_framework} STREQUAL "WebCore" OR ${_framework} STREQUAL "WebKit"))
++        set(WEBKIT_MAX_BUNDLE_SIZE 4 CACHE STRING "Source files merged into one unified source on IRIX")
++        list(APPEND gusb_args --max-bundle-size ${WEBKIT_MAX_BUNDLE_SIZE})
++    endif ()
+ 
+     if (ENABLE_UNIFIED_BUILDS)
+         execute_process(COMMAND ${Ruby_EXECUTABLE} ${WTF_SCRIPTS_DIR}/generate-unified-source-bundles.rb
