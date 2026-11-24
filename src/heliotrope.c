@@ -38,6 +38,8 @@
  */
 
 #include <wpe/webkit.h>
+#include <unicode/utrans.h>
+#include <unicode/ustring.h>
 #include <wpe/wpe-platform.h>
 #include <wpe/headless/wpe-headless.h>
 
@@ -665,15 +667,68 @@ static gboolean load_failed(WebKitWebView *web_view, WebKitLoadEvent event, char
     return FALSE; /* WebKit shows its error page */
 }
 
+/* A UTF-8 title as Latin-1, which is what 4Dwm can show in WM_NAME (in its C
+ * locale a COMPOUND_TEXT title comes out garbled and cut short): other
+ * scripts transliterated (Cyrillic as BGN's: Википедия -> Vikipediya; others
+ * ICU's Any-Latin: Ελληνικά -> Ellēniká, かな -> kana), letters Latin-1 lacks
+ * folded (ē -> e, Ł -> L), and
+ * Han left as "?" (its Latin is Mandarin's, wrong on a Japanese page). */
+static char *latin1_title(const char *utf8)
+{
+    static UTransliterator *tr;
+    static gboolean tried;
+    glong n = 0;
+    gunichar2 *u16;
+    char *text = NULL, *latin1;
+
+    if (!tried) {
+        /* Punctuation first (an em dash), then Cyrillic as BGN's, the other
+         * scripts but Han, and what is left outside Latin-1. As one rule set:
+         * with BGN's step leading, the steps after it took no effect. */
+        static const char rules[] =
+            "::[^\\u0000-\\u00ff] Latin-ASCII; ::[:Cyrillic:] Russian-Latin/BGN; "
+            "::[:^Han:] Any-Latin; ::[^\\u0000-\\u00ff] Latin-ASCII;";
+        UErrorCode err = U_ZERO_ERROR;
+        UParseError where;
+        UChar id[32], text_rules[sizeof rules];
+        u_uastrcpy(id, "Heliotrope-Title");
+        u_uastrcpy(text_rules, rules);
+        tr = utrans_openU(id, -1, UTRANS_FORWARD, text_rules, -1, &where, &err);
+        if (U_FAILURE(err))
+            tr = NULL;
+        tried = TRUE;
+    }
+    if (tr && (u16 = g_utf8_to_utf16(utf8, -1, NULL, &n, NULL)) != NULL) {
+        /* Room for the Latin, which may be longer (one kana, two letters). */
+        int32_t len = (int32_t)n, cap = len * 4 + 16, limit = len;
+        UChar *buf = g_new(UChar, cap);
+        UErrorCode err = U_ZERO_ERROR;
+        memcpy(buf, u16, (size_t)len * sizeof(UChar));
+        utrans_transUChars(tr, buf, &len, cap, 0, &limit, &err);
+        if (U_SUCCESS(err))
+            text = g_utf16_to_utf8((const gunichar2 *)buf, len, NULL, NULL, NULL);
+        g_free(buf);
+        g_free(u16);
+    }
+    latin1 = g_convert_with_fallback(text ? text : utf8, -1, "ISO-8859-1", "UTF-8", "?", NULL, NULL, NULL);
+    g_free(text);
+    return latin1;
+}
+
 static void title_changed(GObject *object, GParamSpec *pspec, App *app)
 {
     const char *title = webkit_web_view_get_title(app->web_view);
     char *name = g_strdup_printf("Heliotrope%s%s", title && *title ? " - " : "", title ? title : "");
-    /* WM_NAME is Latin-1 (STRING), which is what 4Dwm shows; titles are UTF-8. */
-    char *latin1 = g_convert_with_fallback(name, -1, "ISO-8859-1", "UTF-8", "?", NULL, NULL, NULL);
+    char *latin1 = latin1_title(name);
     (void)object;
     (void)pspec;
+    /* WM_NAME and WM_ICON_NAME as 4Dwm can show them (Latin-1 STRING), and
+     * the title itself as _NET_WM_NAME for window managers that take UTF-8. */
     XStoreName(app->dpy, app->win, latin1 ? latin1 : name);
+    XSetIconName(app->dpy, app->win, latin1 ? latin1 : name);
+    XChangeProperty(app->dpy, app->win, XInternAtom(app->dpy, "_NET_WM_NAME", False),
+                    XInternAtom(app->dpy, "UTF8_STRING", False), 8, PropModeReplace,
+                    (const unsigned char *)name, (int)strlen(name));
     g_free(latin1);
     g_free(name);
 }
