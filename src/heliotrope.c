@@ -1488,7 +1488,11 @@ static gboolean present_available(void)
 
     if (env_on("HELIOTROPE_NO_PRESENT"))
         return FALSE;
-    lib = dlopen(path && *path ? path : "/opt/pkgsrc/lib/libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    /* libepoxy's own choice (EPOXY_EGL_LIB) first, then pkgsrc's prefix,
+     * then the soname wherever rld finds it. */
+    lib = dlopen(path && *path ? path : "/usr/pkg/lib/libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib)
+        lib = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
     if (!lib)
         return FALSE;
     get_proc = (void *(*)(const char *))dlsym(lib, "eglGetProcAddress");
