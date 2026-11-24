@@ -1665,6 +1665,11 @@ int main(int argc, char **argv)
      * to 30 seconds for an answer, before the first page process. Set
      * the variable to a bus address to have one. */
     g_setenv("WEBKIT_A11Y_BUS_ADDRESS", "", FALSE);
+    /* Nor a session bus started for anything else (GLib's settings and
+     * proxy modules ask for one): with no bus of the user's, an address
+     * that fails at once, where GLib would autolaunch a dbus-daemon that
+     * outlives the browser. */
+    g_setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/heliotrope-no-session-bus", FALSE);
 
     app.edit = g_string_new(NULL);
     app.present = present_available();
