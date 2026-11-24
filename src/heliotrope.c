@@ -63,7 +63,7 @@
 #include <sys/stat.h>
 
 #ifndef BLOCKLIST_PATH
-#define BLOCKLIST_PATH "/opt/pkgsrc/share/heliotrope/blocklist.json"
+#define BLOCKLIST_PATH "/usr/pkg/share/heliotrope/blocklist.json"
 #endif
 
 #define BAR_HEIGHT 30           /* toolbar */
