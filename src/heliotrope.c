@@ -1592,6 +1592,11 @@ int main(int argc, char **argv)
     /* WebKit's caches (HTTP, HSTS) then live under ~/.cache/heliotrope */
     g_set_prgname("heliotrope");
     setup_bytecode_cache();
+    /* No accessibility bus: asking the D-Bus session bus for it would
+     * start a session bus (dbus-launch) when there is none, and wait up
+     * to 30 seconds for an answer, before the first page process. Set
+     * the variable to a bus address to have one. */
+    g_setenv("WEBKIT_A11Y_BUS_ADDRESS", "", FALSE);
 
     app.edit = g_string_new(NULL);
     app.present = present_available();
