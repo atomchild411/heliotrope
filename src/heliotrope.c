@@ -139,6 +139,14 @@ typedef struct {
     gboolean quit_after_shot;
     gboolean shot_done;
     GMainLoop *loop;
+
+    /* -T FILE: a tour, one address a line, each shown -s seconds once
+     * loaded (or after a minute and a half if it never finishes), in one
+     * session, then quit; each step on stderr with the wall-clock time. */
+    char **tour;
+    int tour_n, tour_i;
+    guint tour_timer;
+    gboolean tour_loaded;       /* this step's page has finished */
     guint8 *last_rgb;           /* the last frame as RGB, for -o */
     int last_width, last_height;
 } App;
@@ -633,6 +641,28 @@ static gboolean take_shot(gpointer data)
 }
 
 static void apply_site_choices(App *app);
+static void load_address(App *app, const char *text);
+
+static double wall_now(void) { return g_get_real_time() / 1e6; }
+
+/* The tour's next page, or the end of it. */
+static gboolean tour_next(gpointer data)
+{
+    App *app = data;
+    app->tour_timer = 0;
+    g_printerr("heliotrope: tour %d/%d leave %.3f %s\n", app->tour_i + 1, app->tour_n, wall_now(),
+        webkit_web_view_get_uri(app->web_view));
+    if (++app->tour_i >= app->tour_n) {
+        g_printerr("heliotrope: tour end %.3f\n", wall_now());
+        g_main_loop_quit(app->loop);
+        return G_SOURCE_REMOVE;
+    }
+    g_printerr("heliotrope: tour %d/%d go %.3f %s\n", app->tour_i + 1, app->tour_n, wall_now(), app->tour[app->tour_i]);
+    app->tour_loaded = FALSE;
+    app->tour_timer = g_timeout_add_seconds(90, tour_next, app);
+    load_address(app, app->tour[app->tour_i]);
+    return G_SOURCE_REMOVE;
+}
 
 static void load_changed(WebKitWebView *web_view, WebKitLoadEvent event, App *app)
 {
@@ -653,6 +683,15 @@ static void load_changed(WebKitWebView *web_view, WebKitLoadEvent event, App *ap
         g_printerr("heliotrope: loaded %s\n", webkit_web_view_get_uri(app->web_view));
         if (app->shot_path && !app->shot_done)
             g_timeout_add_seconds(app->shot_delay, take_shot, app);
+        /* On a tour: the page stays -s seconds from its first finish. */
+        if (app->tour && !app->tour_loaded) {
+            app->tour_loaded = TRUE;
+            if (app->tour_timer)
+                g_source_remove(app->tour_timer);
+            g_printerr("heliotrope: tour %d/%d loaded %.3f in %.1f s\n", app->tour_i + 1, app->tour_n, wall_now(),
+                (g_get_monotonic_time() - app->load_start) / 1e6);
+            app->tour_timer = g_timeout_add_seconds(app->shot_delay, tour_next, app);
+        }
     }
     draw_bar(app);
     XFlush(app->dpy);
@@ -1584,8 +1623,33 @@ int main(int argc, char **argv)
             app.shot_delay = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-q"))
             app.quit_after_shot = TRUE;
+        else if (!strcmp(argv[i], "-T") && i + 1 < argc) {
+            char *text = NULL, **lines;
+            GPtrArray *urls = g_ptr_array_new();
+            int k;
+            if (!g_file_get_contents(argv[++i], &text, NULL, NULL)) {
+                g_printerr("heliotrope: cannot read %s\n", argv[i]);
+                return 2;
+            }
+            lines = g_strsplit(text, "\n", -1);
+            for (k = 0; lines[k]; k++) {
+                char *l = g_strstrip(lines[k]);
+                if (*l && *l != '#')
+                    g_ptr_array_add(urls, g_strdup(l));
+            }
+            g_strfreev(lines);
+            g_free(text);
+            app.tour_n = urls->len;
+            g_ptr_array_add(urls, NULL);
+            app.tour = (char **)g_ptr_array_free(urls, FALSE);
+            if (app.tour_n == 0) {
+                g_printerr("heliotrope: %s has no addresses\n", argv[i]);
+                return 2;
+            }
+            url = app.tour[0];
+        }
         else if (argv[i][0] == '-') {
-            g_printerr("usage: heliotrope [-g WIDTHxHEIGHT[+X+Y]] [-o shot.ppm] [-s seconds] [-q] [URL]\n");
+            g_printerr("usage: heliotrope [-g WIDTHxHEIGHT[+X+Y]] [-o shot.ppm] [-s seconds] [-q] [-T tour-file] [URL]\n");
             return 2;
         } else
             url = argv[i];
@@ -1729,6 +1793,11 @@ int main(int argc, char **argv)
     g_unix_fd_add(ConnectionNumber(app.dpy), G_IO_IN, x_ready, &app);
     load_sites(&app);
     app.pending_url = g_strdup(url);
+    if (app.tour) {
+        /* the first page waits for the block list as well */
+        g_printerr("heliotrope: tour 1/%d go %.3f %s\n", app.tour_n, wall_now(), url);
+        app.tour_timer = g_timeout_add_seconds(120, tour_next, &app);
+    }
     start_block_list(&app);
 
     app.loop = g_main_loop_new(NULL, FALSE);
