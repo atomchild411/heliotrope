@@ -1,5 +1,5 @@
 /* xsend WINDOW-ID ACTION...: synthetic input to one window (XSendEvent), for testing
- * without moving the real pointer. Actions: click X Y [BUTTON] | press X Y | move X Y |
+ * without moving the real pointer. Actions: click X Y [BUTTON] | press X Y [BUTTON] | move X Y |
  * release X Y | type TEXT | key KEYSYM[+ctrl|+alt|+shift] | sleep MS */
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
@@ -23,6 +23,11 @@ static void button(int type, int x, int y, int b)
     e.xbutton.x = x;
     e.xbutton.y = y;
     e.xbutton.button = b;
+    {
+        /* where on the screen: a context menu opens there */
+        Window child;
+        XTranslateCoordinates(d, w, DefaultRootWindow(d), x, y, &e.xbutton.x_root, &e.xbutton.y_root, &child);
+    }
     e.xbutton.state = type == ButtonRelease ? (Button1Mask << (b - 1)) : 0;
     e.xbutton.same_screen = True;
     XSendEvent(d, w, True, type == ButtonPress ? ButtonPressMask : ButtonReleaseMask, &e);
@@ -94,8 +99,10 @@ int main(int argc, char **argv)
             usleep(50000);
             button(ButtonRelease, x, y, b);
         } else if ((!strcmp(a, "press") || !strcmp(a, "release")) && i + 2 < argc) {
-            button(a[0] == 'p' ? ButtonPress : ButtonRelease, atoi(argv[i + 1]), atoi(argv[i + 2]), 1);
-            i += 2;
+            int b = 1;
+            button(a[0] == 'p' ? ButtonPress : ButtonRelease, atoi(argv[i + 1]), atoi(argv[i + 2]),
+                i + 3 < argc && strlen(argv[i + 3]) == 1 && argv[i + 3][0] >= '1' && argv[i + 3][0] <= '7' ? (b = atoi(argv[i + 3])) : 1);
+            i += 2 + (b != 1);
         } else if (!strcmp(a, "move") && i + 2 < argc) {
             motion(atoi(argv[i + 1]), atoi(argv[i + 2]), Button1Mask);
             i += 2;
