@@ -841,6 +841,15 @@ static char *latin1_title(const char *utf8)
     glong n = 0;
     gunichar2 *u16;
     char *text = NULL, *latin1;
+    const char *c;
+
+    /* Most titles are Latin-1 already: no ICU then. Making the
+     * transliterator costs a few percent of a page load's CPU time. */
+    for (c = utf8; *c; c = g_utf8_next_char(c))
+        if (g_utf8_get_char(c) > 0xff)
+            break;
+    if (!*c)
+        return g_convert(utf8, -1, "ISO-8859-1", "UTF-8", NULL, NULL, NULL);
 
     if (!tried) {
         /* Punctuation first (an em dash), then Cyrillic as BGN's, the other
