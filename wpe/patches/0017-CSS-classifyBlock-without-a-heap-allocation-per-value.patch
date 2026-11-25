@@ -1,0 +1,63 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 13:00:00 -0900
+Subject: [PATCH] CSS: classifyBlock without a heap allocation per value
+
+classifyBlock checks every custom property value parsed (and each var()
+fallback), walking nested blocks with a std::stack: a std::deque, which
+allocates a block at its first push. GitHub's stylesheets define hundreds
+of custom properties; on IRIX classifyBlock was 2.9% of the Web process's
+busy time on GitHub and malloc the largest single function (5%). A
+Vector with room for eight nested blocks keeps ordinary values off the
+heap; deeper ones still grow it. The loop does not use its reference to
+the top entry after pushing, so the Vector moving its entries is safe.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WebCore/css/parser/CSSVariableParser.cpp
++++ b/Source/WebCore/css/parser/CSSVariableParser.cpp
+@@ -39,7 +39,7 @@
+ #include "CSSTokenizer.h"
+ #include "CSSValueKeywords.h"
+ #include "StyleCustomProperty.h"
+-#include <stack>
++#include <wtf/Vector.h>
+ 
+ namespace WebCore {
+ 
+@@ -77,18 +77,21 @@
+     };
+     ClassifyBlockState initialState { .range = range };
+ 
+-    std::stack<ClassifyBlockState> stack;
+-    stack.push(initialState);
++    // A Vector with room for a few nested blocks: no allocation for a
++    // value of ordinary depth (std::stack's deque allocates a block at
++    // the first push, for every custom property value parsed).
++    Vector<ClassifyBlockState, 8> stack;
++    stack.append(initialState);
+ 
+     auto result = ClassifyBlockResult { };
+ 
+-    while (!stack.empty()) {
+-        auto& current = stack.top();
++    while (!stack.isEmpty()) {
++        auto& current = stack.last();
+         if (current.doneWithThisRange) {
+             // If there is a top level brace block, the value should contains only that.
+             if (current.topLevelBraceBlocks > 1 || (current.topLevelBraceBlocks == 1 && current.hasOtherValues))
+                 result.hasTopLevelBraceBlockMixedWithOtherValues = true;
+-            stack.pop();
++            stack.removeLast();
+             continue;
+         }
+ 
+@@ -134,7 +137,8 @@
+                 result.hasReferences = true;
+                 continue;
+             }
+-            stack.push(ClassifyBlockState {
++            // current is not used after this: the append may move it.
++            stack.append(ClassifyBlockState {
+                 .range = block,
+                 .isTopLevelBlock = false, // Nested block, not top-level
+             });

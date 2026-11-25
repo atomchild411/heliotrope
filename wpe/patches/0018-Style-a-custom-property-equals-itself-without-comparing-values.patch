@@ -1,0 +1,27 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 13:05:00 -0900
+Subject: [PATCH] Style: a custom property equals itself without comparing values
+
+CustomPropertyData::operator== (deduplicateCustomProperties, at each
+restyled element) compares every custom property of two sets, through
+CustomProperty::operator==: names, then values in depth. A property
+inherited unchanged is the same object on both sides; it is equal to
+itself at once. CustomProperty::operator== was 1.6% of the Web process's
+busy time on GitHub on IRIX.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WebCore/style/StyleCustomProperty.cpp
++++ b/Source/WebCore/style/StyleCustomProperty.cpp
+@@ -46,6 +46,11 @@
+ 
+ bool CustomProperty::operator==(const CustomProperty& other) const
+ {
++    // The same property (inherited unchanged, shared by both sides of a
++    // custom property set comparison): equal without a look at its value.
++    if (this == &other)
++        return true;
++
+     if (m_name != other.m_name || m_value.index() != other.m_value.index())
+         return false;
+ 
