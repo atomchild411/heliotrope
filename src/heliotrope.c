@@ -3214,7 +3214,10 @@ int main(int argc, char **argv)
             "process-swap-on-cross-site-navigation-enabled", env_on("HELIOTROPE_SITE_ISOLATION"),
             NULL));
         webkit_memory_pressure_settings_free(pressure);
-        webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_DOCUMENT_BROWSER);
+        /* HELIOTROPE_CACHE_MODEL=viewer: no disk cache and the smallest memory caches (for measuring
+         * what the network process's cache costs) */
+        webkit_web_context_set_cache_model(context, !g_strcmp0(getenv("HELIOTROPE_CACHE_MODEL"), "viewer")
+            ? WEBKIT_CACHE_MODEL_DOCUMENT_VIEWER : WEBKIT_CACHE_MODEL_DOCUMENT_BROWSER);
         /* Test mode (HELIOTROPE_PROXY, below): no disk cache, so every run
          * loads everything through the proxy and runs compare. */
         WebKitNetworkSession *test_session = getenv("HELIOTROPE_PROXY") && *getenv("HELIOTROPE_PROXY")
