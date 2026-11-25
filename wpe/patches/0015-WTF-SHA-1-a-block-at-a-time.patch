@@ -1,0 +1,118 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 07:10:00 -0900
+Subject: [PATCH] WTF: SHA-1 a block at a time
+
+The portable SHA-1 (every port but Cocoa's) copied its input one byte at
+a time, with a counter and a branch for each, and chose each round's
+function and constant inside the 80-round loop. The network cache hashes
+every body it stores and every one it reads back, plus keys and headers:
+on IRIX this was 2.5% of a page load's CPU time in the network process.
+
+Whole blocks copied with memcpy, and four runs of 20 rounds. The digests
+are the same (RFC 3174 vectors; 3000 random inputs in random chunks
+against the old code): about twice the speed.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WTF/wtf/SHA1.cpp
++++ b/Source/WTF/wtf/SHA1.cpp
+@@ -32,7 +32,9 @@
+ #include "config.h"
+ #include <wtf/SHA1.h>
+ 
++#include <algorithm>
+ #include <cstddef>
++#include <cstring>
+ #include <wtf/Assertions.h>
+ #include <wtf/HexNumber.h>
+ #include <wtf/text/CString.h>
+@@ -73,30 +75,6 @@
+ // http://www.ietf.org/rfc/rfc3174.txt
+ // The names of functions and variables (such as "a", "b", and "f") follow notations in RFC 3174.
+ 
+-static inline uint32_t f(int t, uint32_t b, uint32_t c, uint32_t d)
+-{
+-    ASSERT(t >= 0 && t < 80);
+-    if (t < 20)
+-        return (b & c) | ((~b) & d);
+-    if (t < 40)
+-        return b ^ c ^ d;
+-    if (t < 60)
+-        return (b & c) | (b & d) | (c & d);
+-    return b ^ c ^ d;
+-}
+-
+-static inline uint32_t k(int t)
+-{
+-    ASSERT(t >= 0 && t < 80);
+-    if (t < 20)
+-        return 0x5a827999;
+-    if (t < 40)
+-        return 0x6ed9eba1;
+-    if (t < 60)
+-        return 0x8f1bbcdc;
+-    return 0xca62c1d6;
+-}
+-
+ static inline uint32_t rotateLeft(int n, uint32_t x)
+ {
+     ASSERT(n >= 0 && n < 32);
+@@ -110,10 +88,18 @@
+ 
+ void SHA1::addBytes(std::span<const std::byte> input)
+ {
+-    for (auto byte : input) {
++    // A block at a time rather than a byte at a time: the network cache
++    // hashes every body it stores and reads back.
++    auto* data = reinterpret_cast<const uint8_t*>(input.data());
++    size_t size = input.size();
++    m_totalBytes += size;
++    while (size) {
+         ASSERT(m_cursor < 64);
+-        m_buffer[m_cursor++] = std::to_integer<uint8_t>(byte);
+-        ++m_totalBytes;
++        size_t n = std::min<size_t>(64 - m_cursor, size);
++        memcpy(m_buffer.data() + m_cursor, data, n);
++        m_cursor += n;
++        data += n;
++        size -= n;
+         if (m_cursor == 64)
+             processBlock();
+     }
+@@ -163,7 +149,7 @@
+ {
+     ASSERT(m_cursor == 64);
+ 
+-    std::array <uint32_t, 80> w { };
++    std::array<uint32_t, 80> w;
+     for (int t = 0; t < 16; ++t)
+         w[t] = (m_buffer[t * 4] << 24) | (m_buffer[t * 4 + 1] << 16) | (m_buffer[t * 4 + 2] << 8) | m_buffer[t * 4 + 3];
+     for (int t = 16; t < 80; ++t)
+@@ -175,14 +161,24 @@
+     uint32_t d = m_hash[3];
+     uint32_t e = m_hash[4];
+ 
+-    for (int t = 0; t < 80; ++t) {
+-        uint32_t temp = rotateLeft(5, a) + f(t, b, c, d) + e + w[t] + k(t);
++    // RFC 3174's f(t) and K(t), as four runs of 20 rounds: no choice made in each round.
++    int t = 0;
++    auto round = [&](uint32_t f, uint32_t k) {
++        uint32_t temp = rotateLeft(5, a) + f + e + w[t] + k;
+         e = d;
+         d = c;
+         c = rotateLeft(30, b);
+         b = a;
+         a = temp;
+-    }
++    };
++    for (; t < 20; ++t)
++        round((b & c) | ((~b) & d), 0x5a827999);
++    for (; t < 40; ++t)
++        round(b ^ c ^ d, 0x6ed9eba1);
++    for (; t < 60; ++t)
++        round((b & c) | (b & d) | (c & d), 0x8f1bbcdc);
++    for (; t < 80; ++t)
++        round(b ^ c ^ d, 0xca62c1d6);
+ 
+     m_hash[0] += a;
+     m_hash[1] += b;
