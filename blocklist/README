@@ -1,4 +1,0 @@
-blocklist.json: WebKit content-blocker rules made by make-rules.py from Peter
-Lowe's ad and tracking server list, https://pgl.yoyo.org/adservers/ (plain
-non-HTML format), fetched 2026-09-28. Thanks to Peter Lowe for the list.
-Each rule blocks third-party loads from one listed domain and its subdomains.

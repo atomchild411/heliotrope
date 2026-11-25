@@ -11,7 +11,7 @@
  *
  * The menu bar has File (New Tab, New Window, Open Location, Save Page As,
  * Close Tab, Exit), Edit (Copy, Paste, Select All, Find), View (Reload,
- * zoom, JavaScript and blocking for the site), Go and Help. The toolbar has
+ * zoom, JavaScript for the site), Go and Help. The toolbar has
  * Back, Forward, Reload (Stop while loading) and Home, and the address
  * field: click it (or Ctrl+L) and type; Enter goes, Escape cancels. Text
  * that is not an address searches DuckDuckGo Lite. The field also asks for
@@ -36,11 +36,9 @@
  * (default 5) have passed; -q then quits. HELIOTROPE_HOME sets Home (default:
  * the first page).
  *
- * Blocking: third-party loads from ad and tracking servers are blocked (Peter
- * Lowe's list, https://pgl.yoyo.org/adservers/, compiled by WebKit's content
- * blocker on first use and cached). The shield button turns blocking off for
- * the current site, the JS button JavaScript; both are remembered per site in
- * ~/.config/heliotrope/sites. HELIOTROPE_BLOCKLIST names another rule list.
+ * Per site: the JS button turns JavaScript off for the current site,
+ * remembered in ~/.config/heliotrope/sites. Nothing is blocked by heliotrope
+ * itself: filtering is the network's business (DNS, a proxy).
  *
  * Caches: WebKit's HTTP cache (it follows Cache-Control, Expires and
  * revalidation) is in ~/.cache/heliotrope, and scripts' compiled bytecode in
@@ -78,20 +76,16 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
-#ifndef BLOCKLIST_PATH
-#define BLOCKLIST_PATH "/usr/pkg/share/heliotrope/blocklist.json"
-#endif
-
 #define MENU_HEIGHT 22          /* the menu bar */
 #define BAR_HEIGHT 30           /* toolbar */
 #define TAB_HEIGHT 24           /* the tab strip, shown when there are two tabs or more */
 #define BUTTON_WIDTH 28
 #define BUTTON_HEIGHT 24
 
-enum { BUTTON_BACK, BUTTON_FORWARD, BUTTON_RELOAD, BUTTON_HOME, BUTTON_JS, BUTTON_BLOCK, N_BUTTONS };
+enum { BUTTON_BACK, BUTTON_FORWARD, BUTTON_RELOAD, BUTTON_HOME, BUTTON_JS, N_BUTTONS };
 
 /* per-site choices, remembered in ~/.config/heliotrope/sites */
-enum { SITE_NO_JS = 1, SITE_NO_BLOCKING = 2 };
+enum { SITE_NO_JS = 1 };
 
 typedef struct App App;
 
@@ -166,13 +160,8 @@ struct App {
 
     char *status;               /* the link under the pointer */
 
-    /* blocking and per-site choices */
+    /* per-site choices */
     WebKitUserContentManager *content_manager;
-    WebKitUserContentFilterStore *filter_store;
-    WebKitUserContentFilter *filter;    /* the compiled block list, once ready */
-    gboolean filter_active;             /* added to content_manager */
-    char *filter_id;
-    char *pending_url;                  /* the first page, waiting for the filter */
     GHashTable *sites;                  /* host -> SITE_* flags */
     char *sites_path;
 
@@ -364,24 +353,6 @@ static void draw_icon(App *app, int which, const XRectangle *r, gboolean enabled
                 cy + (app->font->ascent - app->font->descent) / 2, "JS", 2);
         if (!on) {
             XSetForeground(app->dpy, app->gc, app->ink);
-            XDrawLine(app->dpy, app->win, app->gc, cx - 8, cy + 7, cx + 8, cy - 7);
-        }
-        break;
-    }
-    case BUTTON_BLOCK: {
-        gboolean on = app->filter && !(current_site_flags(app) & SITE_NO_BLOCKING);
-        p[0].x = cx - 7; p[0].y = cy - 7;
-        p[1].x = cx + 7; p[1].y = cy - 7;
-        p[2].x = cx + 7; p[2].y = cy;
-        p[3].x = cx; p[3].y = cy + 8;
-        p[4].x = cx - 7; p[4].y = cy;
-        p[5] = p[0];
-        if (on) {
-            XSetForeground(app->dpy, app->gc, app->progress);
-            XFillPolygon(app->dpy, app->win, app->gc, p, 5, Convex, CoordModeOrigin);
-        } else {
-            XSetForeground(app->dpy, app->gc, app->ink_disabled);
-            XDrawLines(app->dpy, app->win, app->gc, p, 6, CoordModeOrigin);
             XDrawLine(app->dpy, app->win, app->gc, cx - 8, cy + 7, cx + 8, cy - 7);
         }
         break;
@@ -1202,7 +1173,7 @@ static void send(App *app, WPEEvent *event)
     wpe_event_unref(event);
 }
 
-/* --- per-site choices and the block list ------------------------------------ */
+/* --- per-site choices -------------------------------------------------------- */
 
 static void load_sites(App *app)
 {
@@ -1224,8 +1195,6 @@ static void load_sites(App *app)
         for (j = 1; w[j]; j++) {
             if (!strcmp(w[j], "nojs"))
                 flags |= SITE_NO_JS;
-            else if (!strcmp(w[j], "noblock"))
-                flags |= SITE_NO_BLOCKING;
         }
         if (flags)
             g_hash_table_insert(app->sites, g_strdup(w[0]), GUINT_TO_POINTER(flags));
@@ -1237,15 +1206,14 @@ static void load_sites(App *app)
 
 static void save_sites(App *app)
 {
-    GString *out = g_string_new("# heliotrope per-site choices: host nojs|noblock\n");
+    GString *out = g_string_new("# heliotrope per-site choices: host nojs\n");
     GHashTableIter it;
     gpointer key, value;
     char *dir = g_path_get_dirname(app->sites_path);
     g_hash_table_iter_init(&it, app->sites);
     while (g_hash_table_iter_next(&it, &key, &value)) {
         unsigned flags = GPOINTER_TO_UINT(value);
-        g_string_append_printf(out, "%s%s%s\n", (char *)key, flags & SITE_NO_JS ? " nojs" : "",
-            flags & SITE_NO_BLOCKING ? " noblock" : "");
+        g_string_append_printf(out, "%s%s\n", (char *)key, flags & SITE_NO_JS ? " nojs" : "");
     }
     g_mkdir_with_parents(dir, 0755);
     g_file_set_contents(app->sites_path, out->str, (gssize)out->len, NULL);
@@ -1253,18 +1221,11 @@ static void save_sites(App *app)
     g_string_free(out, TRUE);
 }
 
-/* Apply a page's site's choices before its document and resources load. The
- * block list is the tabs' one content manager's: the latest page decides. */
+/* Apply a page's site's choices before its document and resources load. */
 static void apply_site_choices(App *app, WebKitWebView *web_view)
 {
     unsigned flags = site_flags_of(app, webkit_web_view_get_uri(web_view));
-    gboolean block = app->filter && !(flags & SITE_NO_BLOCKING);
     webkit_settings_set_enable_javascript(webkit_web_view_get_settings(web_view), !(flags & SITE_NO_JS));
-    if (block && !app->filter_active)
-        webkit_user_content_manager_add_filter(app->content_manager, app->filter);
-    else if (!block && app->filter_active)
-        webkit_user_content_manager_remove_filter(app->content_manager, app->filter);
-    app->filter_active = block;
 }
 
 static void toggle_site(App *app, unsigned flag)
@@ -1284,90 +1245,6 @@ static void toggle_site(App *app, unsigned flag)
     }
     if (parsed)
         g_uri_unref(parsed);
-}
-
-static void load_pending_page(App *app)
-{
-    if (app->pending_url) {
-        load_address(app, app->pending_url);
-        g_clear_pointer(&app->pending_url, g_free);
-    }
-}
-
-static void filter_ready(App *app, WebKitUserContentFilter *filter, gint64 started)
-{
-    app->filter = filter;
-    g_printerr("heliotrope: block list ready (%.1f s)\n", (g_get_monotonic_time() - started) / 1e6);
-    g_clear_pointer(&app->status, g_free);
-    load_pending_page(app);
-    draw_bar(app);
-}
-
-typedef struct { App *app; gint64 started; } FilterJob;
-
-static void filter_saved(GObject *store, GAsyncResult *result, gpointer data)
-{
-    FilterJob *job = data;
-    GError *error = NULL;
-    WebKitUserContentFilter *filter = webkit_user_content_filter_store_save_finish(WEBKIT_USER_CONTENT_FILTER_STORE(store), result, &error);
-    if (filter)
-        filter_ready(job->app, filter, job->started);
-    else {
-        g_printerr("heliotrope: cannot compile the block list: %s\n", error->message);
-        g_error_free(error);
-        g_clear_pointer(&job->app->status, g_free);
-        load_pending_page(job->app);
-    }
-    g_free(job);
-}
-
-static void filter_loaded(GObject *store, GAsyncResult *result, gpointer data)
-{
-    FilterJob *job = data;
-    App *app = job->app;
-    WebKitUserContentFilter *filter = webkit_user_content_filter_store_load_finish(WEBKIT_USER_CONTENT_FILTER_STORE(store), result, NULL);
-    const char *path = getenv("HELIOTROPE_BLOCKLIST") ? getenv("HELIOTROPE_BLOCKLIST") : BLOCKLIST_PATH;
-    char *json = NULL;
-    gsize length;
-    if (filter) {
-        filter_ready(app, filter, job->started);
-        g_free(job);
-        return;
-    }
-    /* Not compiled yet (or the list changed): compile it now, once. */
-    if (!g_file_get_contents(path, &json, &length, NULL)) {
-        g_clear_pointer(&app->status, g_free);
-        load_pending_page(app);
-        g_free(job);
-        return;
-    }
-    g_free(app->status);
-    app->status = g_strdup("Preparing the block list (first run only)...");
-    draw_page(app);
-    XFlush(app->dpy);
-    webkit_user_content_filter_store_save(app->filter_store, app->filter_id, g_bytes_new_take(json, length), NULL, filter_saved, job);
-}
-
-/* The compiled list is stored under an identifier made from the rule file's
- * size and time, so a new list is compiled once and the old one replaced. */
-static void start_block_list(App *app)
-{
-    const char *path = getenv("HELIOTROPE_BLOCKLIST") ? getenv("HELIOTROPE_BLOCKLIST") : BLOCKLIST_PATH;
-    GStatBuf st;
-    FilterJob *job;
-    char *dir;
-    if (!*path || g_stat(path, &st) != 0) {
-        load_pending_page(app);
-        return;
-    }
-    dir = g_build_filename(g_get_user_cache_dir(), "heliotrope", "content-filters", NULL);
-    app->filter_store = webkit_user_content_filter_store_new(dir);
-    g_free(dir);
-    app->filter_id = g_strdup_printf("blocklist-%ld-%ld", (long)st.st_size, (long)st.st_mtime);
-    job = g_new0(FilterJob, 1);
-    job->app = app;
-    job->started = g_get_monotonic_time();
-    webkit_user_content_filter_store_load(app->filter_store, app->filter_id, NULL, filter_loaded, job);
 }
 
 static void press_button(App *app, int i)
@@ -1390,9 +1267,6 @@ static void press_button(App *app, int i)
         break;
     case BUTTON_JS:
         toggle_site(app, SITE_NO_JS);
-        break;
-    case BUTTON_BLOCK:
-        toggle_site(app, SITE_NO_BLOCKING);
         break;
     }
 }
@@ -1442,8 +1316,8 @@ static void apply_features(App *app, WebKitWebView *web_view)
     g_strfreev(names);
     g_free(list);
     webkit_feature_list_unref(all);
-    /* HELIOTROPE_CONSOLE=1: the page's console messages (including what the
-     * content blocker stopped) go to stdout, for testing. */
+    /* HELIOTROPE_CONSOLE=1: the page's console messages go to stdout, for
+     * testing. */
     if (env_on("HELIOTROPE_CONSOLE"))
         webkit_settings_set_enable_write_console_messages_to_stdout(settings, TRUE);
 }
@@ -2050,7 +1924,7 @@ static void find_text(App *app, const char *text)
 enum {
     ACT_NONE, ACT_NEW_TAB, ACT_NEW_WINDOW, ACT_OPEN_LOCATION, ACT_SAVE_PAGE, ACT_CLOSE_TAB, ACT_EXIT,
     ACT_COPY, ACT_PASTE, ACT_SELECT_ALL, ACT_FIND, ACT_FIND_AGAIN,
-    ACT_RELOAD, ACT_STOP, ACT_ZOOM_IN, ACT_ZOOM_OUT, ACT_ZOOM_RESET, ACT_TOGGLE_JS, ACT_TOGGLE_BLOCK,
+    ACT_RELOAD, ACT_STOP, ACT_ZOOM_IN, ACT_ZOOM_OUT, ACT_ZOOM_RESET, ACT_TOGGLE_JS,
     ACT_BACK, ACT_FORWARD, ACT_HOME, ACT_PREV_TAB, ACT_NEXT_TAB, ACT_ABOUT,
     ACT_LINK_OPEN, ACT_LINK_TAB, ACT_LINK_WINDOW, ACT_LINK_SAVE, ACT_LINK_COPY,
     ACT_IMAGE_TAB, ACT_IMAGE_SAVE, ACT_IMAGE_COPY
@@ -2150,8 +2024,6 @@ static int build_menu(App *app, int menu, MenuItem *it)
         n = add_item(it, n, "Actual Size", "Ctrl+0", ACT_ZOOM_RESET, TRUE);
         n = add_item(it, n, NULL, NULL, ACT_NONE, FALSE);
         n = add_item(it, n, flags & SITE_NO_JS ? "JavaScript Off for This Site" : "JavaScript On for This Site", NULL, ACT_TOGGLE_JS, TRUE);
-        n = add_item(it, n, !app->filter ? "Ad Blocking Unavailable" : flags & SITE_NO_BLOCKING ? "Ad Blocking Off for This Site"
-            : "Ad Blocking On for This Site", NULL, ACT_TOGGLE_BLOCK, app->filter != NULL);
         break;
     case 3:
         n = add_item(it, n, "Back", "Alt+Left", ACT_BACK, webkit_web_view_can_go_back(app->web_view));
@@ -2471,9 +2343,6 @@ static void do_action(App *app, int action)
         break;
     case ACT_TOGGLE_JS:
         toggle_site(app, SITE_NO_JS);
-        break;
-    case ACT_TOGGLE_BLOCK:
-        toggle_site(app, SITE_NO_BLOCKING);
         break;
     case ACT_BACK:
         webkit_web_view_go_back(app->web_view);
@@ -2983,14 +2852,16 @@ static gboolean open_window(App *app)
     app->status_bg = color(app, 0xee, 0xe8, 0xf4);
     set_cursor(app, app->arrow);
     if (app->present) {
-        /* No event mask: input still reaches app->win. No background: only
-         * WebKit draws here. */
+        /* No event mask: input still reaches app->win. White until WebKit's
+         * first frame covers it (with no background, whatever the screen
+         * held there showed through while the first page loaded). */
         XSetWindowAttributes pa;
         pa.colormap = attrs.colormap;
         pa.border_pixel = 0;
         pa.background_pixmap = None;
+        pa.background_pixel = WhitePixel(app->dpy, DefaultScreen(app->dpy));
         app->page_win = XCreateWindow(app->dpy, app->win, 0, page_top(app), page_width(app), page_height(app), 0,
-            app->depth, InputOutput, app->visual, CWColormap | CWBorderPixel | CWBackPixmap, &pa);
+            app->depth, InputOutput, app->visual, CWColormap | CWBorderPixel | CWBackPixel, &pa);
         XMapWindow(app->dpy, app->page_win);
         app->status_win = XCreateWindow(app->dpy, app->win, 0, 0, 1, 1, 0, app->depth, InputOutput, app->visual,
             CWColormap | CWBorderPixel, &pa);
@@ -3245,13 +3116,11 @@ int main(int argc, char **argv)
     g_signal_connect(webkit_web_view_get_network_session(app.web_view), "download-started", G_CALLBACK(download_started), &app);
     g_unix_fd_add(ConnectionNumber(app.dpy), G_IO_IN, x_ready, &app);
     load_sites(&app);
-    app.pending_url = g_strdup(url);
     if (app.tour) {
-        /* the first page waits for the block list as well */
         g_printerr("heliotrope: tour 1/%d go %.3f %s\n", app.tour_n, wall_now(), url);
         app.tour_timer = g_timeout_add_seconds(120, tour_next, &app);
     }
-    start_block_list(&app);
+    load_address(&app, url);
 
     app.loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(app.loop);

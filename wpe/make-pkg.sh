@@ -31,8 +31,6 @@ mkdir -p "$P/bin"
     -L"$P/lib" -L"$S/opt/pkgsrc/lib" -Wl,-rpath,/opt/pkgsrc/lib \
     -lWPEWebKit-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lXext -lX11
 "$STRIP" "$P/bin/heliotrope"
-mkdir -p "$P/share/heliotrope"
-cp "$WS/code/heliotrope/blocklist/blocklist.json" "$WS/code/heliotrope/blocklist/README" "$P/share/heliotrope/"
 
 cd "$P"
 find . \( -type f -o -type l \) | sed 's|^\./||' | sort > "$HERE/PLIST"
