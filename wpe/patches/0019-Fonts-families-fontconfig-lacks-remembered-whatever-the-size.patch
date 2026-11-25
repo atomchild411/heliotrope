@@ -1,0 +1,106 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 13:50:00 -0900
+Subject: [PATCH] Fonts: families fontconfig lacks remembered, whatever the size
+
+CSS family lists name many families a system lacks (-apple-system,
+BlinkMacSystemFont, "Segoe UI"...). FontCache keeps a lookup's result by
+its whole description, size included, so each such family was looked for
+again at every size: a pattern run through fontconfig's whole
+configuration (FcConfigSubstitute and its few hundred alias rules) and a
+match, only for the family check to refuse the font. On IRIX font
+creation was 3.4% of GitHub's Web process busy time, mostly
+FcConfigSubstitute.
+
+Whether fontconfig has a family does not depend on the size (the only
+size-dependent rules in a stock configuration change hinting, or apply to
+generic families, which are never refused here), so a family found
+missing for a slant and weight is answered at once for every other size.
+The set is per process, behind a lock (fonts are made on workers too),
+and cleared when fonts change (platformInvalidate).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WebCore/platform/graphics/freetype/FontCacheFreeType.cpp
++++ b/Source/WebCore/platform/graphics/freetype/FontCacheFreeType.cpp
+@@ -41,6 +41,10 @@
+ #include <wtf/Assertions.h>
+ #include <wtf/HashFunctions.h>
+ #include <wtf/HashMap.h>
++#include <wtf/HashSet.h>
++#include <wtf/Lock.h>
++#include <wtf/NeverDestroyed.h>
++#include <wtf/text/MakeString.h>
+ #include <wtf/text/CString.h>
+ 
+ #if PLATFORM(GTK) || (PLATFORM(WPE) && ENABLE(WPE_PLATFORM))
+@@ -364,6 +368,20 @@
+         || equalLettersIgnoringASCIICase(familyNameString, "cursive"_s);
+ }
+ 
++// Families fontconfig has no font of, by slant and weight: CSS lists of
++// families name many that a system lacks (-apple-system, Segoe UI...), and
++// each was looked for again at every size, through fontconfig's whole
++// configuration (FcConfigSubstitute, its alias rules) and a match, only to
++// be refused. Whether a family is there does not depend on the size; the
++// sizes are where the requests multiply. Forgotten when fonts change
++// (platformInvalidate).
++static Lock missingFamiliesLock;
++static HashSet<String>& missingFamilies()
++{
++    static NeverDestroyed<HashSet<String>> families;
++    return families;
++}
++
+ std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription, const AtomString& family, const FontCreationContext& fontCreationContext, OptionSet<FontLookupOptions> options)
+ {
+     // The CSS font matching algorithm (http://www.w3.org/TR/css3-fonts/#font-matching-algorithm)
+@@ -376,6 +394,16 @@
+     FcPatternAddBool(pattern.get(), FC_VARIABLE, FcDontCare);
+ #endif
+     String familyNameString(getFamilyNameStringFromFamily(family));
++    String missingKey = makeString(familyNameString, '\n', fontDescription.fontStyleSlope() ? 'i' : 'r', fontWeightToFontconfigWeight(fontDescription.weight()));
++    {
++        Locker locker { missingFamiliesLock };
++        if (missingFamilies().contains(missingKey))
++            return nullptr;
++    }
++    auto rememberMissing = [&] {
++        Locker locker { missingFamiliesLock };
++        missingFamilies().add(missingKey);
++    };
+     if (!FcPatternAddString(pattern.get(), FC_FAMILY, reinterpret_cast<const FcChar8*>(familyNameString.utf8().data())))
+         return nullptr;
+ 
+@@ -402,8 +430,10 @@
+ 
+     FcResult fontConfigResult;
+     RefPtr<FcPattern> resultPattern = adoptRef(FcFontMatch(nullptr, pattern.get(), &fontConfigResult));
+-    if (!resultPattern) // No match.
++    if (!resultPattern) { // No match.
++        rememberMissing();
+         return nullptr;
++    }
+ 
+ #if FC_VERSION < 21395
+     bool matchedFontFamily = false;
+@@ -433,8 +463,10 @@
+     }
+ #endif
+ 
+-    if (!matchedFontFamily)
++    if (!matchedFontFamily) {
++        rememberMissing();
+         return nullptr;
++    }
+ 
+     bool fixedWidth, syntheticBold, syntheticOblique;
+     getFontPropertiesFromPattern(resultPattern.get(), fontDescription, options, fixedWidth, syntheticBold, syntheticOblique);
+@@ -606,6 +638,8 @@
+ 
+ void FontCache::platformInvalidate()
+ {
++    Locker locker { missingFamiliesLock };
++    missingFamilies().clear();
+ }
+ 
+ }
