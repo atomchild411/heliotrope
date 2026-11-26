@@ -1,0 +1,47 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 22:30:00 -0900
+Subject: [PATCH] WTF: IRIX threads bound to their own kernel vehicle, 1 MB stacks
+
+On a VPro Octane2 the kernel kept killing WPEWebProcess with "process or
+stack limit exceeded" a few seconds into a page load or a new tab (two
+kills in a five-step browsing scenario). It never happened under dbx or
+par; par showed libpthread's preemption signal, SIGPTRESCHED (48),
+arriving many times in the Web process. Larger thread stacks (8 MB) did
+not help.
+
+IRIX threads default to process scope: many threads share a few kernel
+execution vehicles and libpthread switches them around with that signal.
+Creating WebKit's threads with PTHREAD_SCOPE_BOUND_NP gives each its own
+vehicle, scheduled by the kernel and never switched; it needs no
+privilege (unlike PTHREAD_SCOPE_SYSTEM). With every thread bound the same
+scenario ran twice without a kill, pages drawn correctly.
+
+Threads with no stack size of their own also get 1 MB instead of IRIX's
+128 KB; other systems give WebKit's threads megabytes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WTF/wtf/posix/ThreadingPOSIX.cpp
++++ b/Source/WTF/wtf/posix/ThreadingPOSIX.cpp
+@@ -314,6 +314,21 @@
+ #if HAVE(SCHEDULING_POLICIES)
+     pthread_attr_setschedpolicy(&attr, schedPolicy(schedulingPolicy));
+ #endif
++#if OS(IRIX)
++    // In its default (process) scope an IRIX thread shares a few kernel
++    // execution vehicles with the process's other threads, and libpthread
++    // moves it between them with a signal (SIGPTRESCHED). Under WebKit's load
++    // the kernel then kills processes with "process or stack limit exceeded".
++    // A bound thread has a vehicle of its own, needs no privilege, and is never
++    // moved. IRIX's default stack (128 KB) is also far below what WebKit's
++    // threads get elsewhere.
++#ifndef PTHREAD_SCOPE_BOUND_NP
++#define PTHREAD_SCOPE_BOUND_NP 2
++#endif
++    pthread_attr_setscope(&attr, PTHREAD_SCOPE_BOUND_NP);
++    if (!stackSize)
++        stackSize = 1 * MB;
++#endif
+     if (stackSize)
+         pthread_attr_setstacksize(&attr, stackSize.value());
+     int error = pthread_create(&threadHandle, &attr, wtfThreadEntryPoint, &context);

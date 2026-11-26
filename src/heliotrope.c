@@ -73,6 +73,7 @@
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/resource.h>
+#include <unistd.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 
@@ -2757,6 +2758,33 @@ static gboolean x_ready(gint fd, GIOCondition condition, gpointer data)
 
 /* --- setup --------------------------------------------------------------------- */
 
+/* WebKit's processes on real IRIX: IRIX's own Xlib loaded first. WebKit links
+ * pkgsrc's libX11.so.6, whose XOpenDisplay then serves irix-egl-gles too, and
+ * SGI's GLX cannot render directly on a display pkgsrc's Xlib opened: it quietly
+ * makes every context indirect, rendered by a helper process of the X server,
+ * which the kernel kills (RRM_ValidFault "not bound to an rn"); the page then
+ * stops drawing. With IRIX's libX11.so.1 first, one Xlib serves both. Only the
+ * processes WebKit starts get it (they inherit the environment); this one
+ * keeps pkgsrc's. HELIOTROPE_NO_IRIX_XLIB=1 leaves it out;
+ * HELIOTROPE_CHILD_PRELOAD adds libraries (tests). */
+#define IRIX_XLIB "/usr/lib32/libX11.so.1"
+
+static void use_irix_xlib_for_children(void)
+{
+    const char *old = g_getenv("_RLDN32_LIST");
+    const char *extra = g_getenv("HELIOTROPE_CHILD_PRELOAD");
+    GString *list;
+    if (env_on("HELIOTROPE_NO_IRIX_XLIB") || access(IRIX_XLIB, R_OK) != 0)
+        return;
+    list = g_string_new(IRIX_XLIB);
+    if (extra && *extra)
+        g_string_append_printf(list, ":%s", extra);
+    /* rld's list ends with DEFAULT (the usual search); keep one that was set */
+    g_string_append_printf(list, ":%s", old && *old ? old : "DEFAULT");
+    g_setenv("_RLDN32_LIST", list->str, TRUE);
+    g_string_free(list, TRUE);
+}
+
 /* IRIX starts processes with 200 descriptors. A page like GitHub loads ~140
  * resources at once, and WebKit passes each chunk of their data between its
  * processes as a shared-memory file descriptor: at 200 the Web process ran
@@ -3026,6 +3054,7 @@ int main(int argc, char **argv)
      * to 30 seconds for an answer, before the first page process. Set
      * the variable to a bus address to have one. */
     g_setenv("WEBKIT_A11Y_BUS_ADDRESS", "", FALSE);
+    use_irix_xlib_for_children();
     /* Nor a session bus started for anything else (GLib's settings and
      * proxy modules ask for one): with no bus of the user's, an address
      * that fails at once, where GLib would autolaunch a dbus-daemon that
