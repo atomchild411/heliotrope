@@ -27,7 +27,7 @@ I=$S/opt/pkgsrc/include
 PKGCONFIG_CFLAGS="-I$P/include/wpe-webkit-2.0 -I$P/include/wpe-webkit-2.0/wpe-platform -I$I/glib-2.0 -I$S/opt/pkgsrc/lib/glib-2.0/include -I$I/libsoup-3.0 -I$I"
 mkdir -p "$P/bin"
 "$CC" -target mips64-sgi-irix6.5 -march=mips4 -mtune=r10000 --sysroot="$S" -O2 -Wall -Wextra -Wno-unused-parameter $PKGCONFIG_CFLAGS \
-    -o "$P/bin/heliotrope" "$WS/code/heliotrope/src/heliotrope.c" \
+    -o "$P/bin/heliotrope" "$WS"/code/heliotrope/src/*.c \
     -L"$P/lib" -L"$S/opt/pkgsrc/lib" -Wl,-rpath,/opt/pkgsrc/lib \
     -lWPEWebKit-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lXext -lX11
 "$STRIP" "$P/bin/heliotrope"
