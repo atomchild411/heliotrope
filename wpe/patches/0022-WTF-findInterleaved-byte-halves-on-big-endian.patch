@@ -1,0 +1,57 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Sat, 28 Nov 2026 06:30:00 +0000
+Subject: [PATCH] WTF: SIMD::findInterleaved's byte halves the right way round
+ on big-endian CPUs
+
+DuckDuckGo's results page showed its side menu as raw HTML. The menu is a
+template string with a right single quote (U+2019) in it, so it is a
+16-bit string, and jQuery turns it into nodes with innerHTML. WebKit's
+fast fragment parser scans 16-bit text with SIMD::findInterleaved, which
+loads 32 bytes with vld2q_u8 and passes val[0] as the characters' low
+bytes and val[1] as their high bytes. vld2q_u8 splits bytes in memory
+order, so on a big-endian CPU (IRIX on MIPS) val[0] holds the high
+bytes: no '<', '&', '\r' or NUL was ever found in text of 16 characters
+or more, and the whole fragment became one text node. Shorter text takes
+the scalar loop and was right, which is why most pages were fine.
+
+The load now swaps the two halves back on big-endian CPUs. Both users
+(scanText and attribute values in HTMLDocumentParserFastPath) get the
+low bytes in val[0] again. Checked with the scan built for IRIX against
+WebKit's SIMDe: the original load finds no '<' in a 16-bit
+"<div ...>" string, the swapped one finds it at 0.
+
+Fixes https://github.com/atomchild411/heliotrope/issues/1
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/WTF/wtf/SIMDHelpers.h
++++ b/Source/WTF/wtf/SIMDHelpers.h
+@@ -621,15 +621,26 @@
+ {
+     constexpr size_t stride = SIMD::stride<CharacterType> * 2;
+     static_assert(threshold >= stride);
++    // Each character's bytes, split into two vectors: val[0] the low bytes
++    // and val[1] the high bytes, which is what the vectorMatch functions take.
++    // vld2q_u8 deinterleaves in memory order, so on a big-endian CPU the high
++    // byte comes first and the two halves are swapped back.
++    auto load = [](const CharacterType* pointer) ALWAYS_INLINE_LAMBDA {
++        auto bytes = simde_vld2q_u8(std::bit_cast<const uint8_t*>(pointer));
++#if CPU(BIG_ENDIAN)
++        std::swap(bytes.val[0], bytes.val[1]);
++#endif
++        return bytes;
++    };
+     const auto* cursor = span.data();
+     const auto* end = span.data() + span.size();
+     if (span.size() >= threshold) {
+         for (; cursor + stride <= end; cursor += stride) {
+-            if (auto index = vectorMatch(simde_vld2q_u8(std::bit_cast<const uint8_t*>(cursor))))
++            if (auto index = vectorMatch(load(cursor)))
+                 return cursor + index.value();
+         }
+         if (cursor < end) {
+-            if (auto index = vectorMatch(simde_vld2q_u8(std::bit_cast<const uint8_t*>(end - stride))))
++            if (auto index = vectorMatch(load(end - stride)))
+                 return end - stride + index.value();
+         }
+         return end;
