@@ -1,0 +1,60 @@
+From: atomchild411 <143453386+atomchild411@users.noreply.github.com>
+Date: Sat, 28 Nov 2026 07:10:00 +0000
+Subject: [PATCH] JSC: Uint8Array.fromHex and toHex vector steps on big-endian
+ CPUs
+
+Uint8Array.fromHex("0123456789abcdef") gave 16,50,84,118,152,186,220,254
+on IRIX instead of 1,35,69,...,239, and new Uint8Array([1,...,8]).toHex()
+gave "1020304050607080": every byte had its two hex digits swapped, with
+no error, for 16 or more digits (8 or more bytes); shorter input takes the
+scalar loops and was right. Code that hashes or encodes with these
+built-ins would get wrong results.
+
+Both vector steps reinterpret between 8- and 16-bit lanes, a copy of the
+bytes in memory order, and pick each pair's digits by shifting as if the
+first byte were the lane's low byte. On a big-endian CPU it is the high
+byte. Under CPU(BIG_ENDIAN) the shifts now take the first digit from the
+high byte (fromHex) and put the high nibble in the high byte (toHex).
+
+Checked with the two steps built for IRIX against WebKit's SIMDe: the
+original code gives the wrong bytes above, as heliotrope does on an
+Octane; with the patch both are right. Little-endian builds are
+unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+--- a/Source/JavaScriptCore/runtime/JSGenericTypedArrayViewConstructor.cpp
++++ b/Source/JavaScriptCore/runtime/JSGenericTypedArrayViewConstructor.cpp
+@@ -136,8 +136,15 @@
+             return false;
+ 
+         auto converted = simde_vreinterpretq_u16_u8(nibbles);
++#if CPU(BIG_ENDIAN)
++        // Each lane is the pair's first nibble in its high byte and its second in its low byte:
++        // (high byte << 4) | low byte.
++        auto high = simde_vshrq_n_u16(converted, 4);
++        auto low = simde_vshrq_n_u16(simde_vshlq_n_u16(converted, 8), 8);
++#else
+         auto low = simde_vshrq_n_u16(converted, 8);
+         auto high = simde_vshlq_n_u16(converted, 4);
++#endif
+         simde_vst1_u8(output, simde_vmovn_u16(simde_vorrq_u16(low, high)));
+         return true;
+     };
+--- a/Source/JavaScriptCore/runtime/JSGenericTypedArrayViewPrototype.cpp
++++ b/Source/JavaScriptCore/runtime/JSGenericTypedArrayViewPrototype.cpp
+@@ -253,8 +253,14 @@
+             // masked             : 0H0L0H0L0H0L0H0L0H0L0H0L0H0L0H0L
+             constexpr simde_uint8x16_t characters { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+             auto widen = simde_vmovl_u8(input);
++#if CPU(BIG_ENDIAN)
++            // A lane's high byte comes first in memory: the high nibble goes there, the low one below.
++            auto high = simde_vshlq_n_u16(simde_vshrq_n_u16(widen, 4), 8);
++            auto low = widen;
++#else
+             auto high = simde_vshlq_n_u16(widen, 8);
+             auto low = simde_vshrq_n_u16(widen, 4);
++#endif
+             auto merged = SIMD::bitOr(high, low);
+             auto masked = SIMD::bitAnd(simde_vreinterpretq_u8_u16(merged), SIMD::splat<uint8_t>(0xf));
+             return simde_vqtbl1q_u8(characters, masked);

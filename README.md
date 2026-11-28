@@ -27,8 +27,8 @@ softpipe EGL, shown in an X window.
   Each `.c` has a header of the same name declaring what other modules may
   call; everything else in it is `static`.
 - `wpe/patches/` -- the WebKit changes (apply to wpewebkit-2.52.6 in order):
-  the IRIX port, a big-endian TextureMapper colour fix, and a big-endian
-  CompactVariant fix.
+  the IRIX port, big-endian fixes (TextureMapper colours, CompactVariant, and
+  the fast HTML parser's 16-bit text scan), and memory and speed work.
 - `wpe/*.sh` -- the spike build: configure, build (ninja -j5), and package as
   an IRIX binary package (`wpewebkit-heliotrope`). Paths still point at the
   workspace's `scratch/wpe`; a pkgsrc `www/wpewebkit` recipe will replace them.
